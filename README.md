@@ -3,6 +3,8 @@
 An [Aspire](https://aspire.dev) hosting integration that adds a small web UI to browse an Azure Blob Storage account.
 It is meant for local development with the Azurite emulator, so you don't need a separate storage explorer.
 
+![Storage Explorer showing the containers of an account and the folders and files of one of them](assets/screenshots/overview.png)
+
 **Features:** list and search containers, navigate folders with a breadcrumb, list blobs (name, size, content type,
 last modified), search them by name in a folder and everything below it or in the whole container, sort by any column,
 download a blob, and delete a blob after a confirmation that names the account (on an account that is not on your
@@ -12,6 +14,16 @@ machine you also type the name of the blob). Deleting is only enabled for local 
 **Requirements:** .NET 10, Aspire 13.1 or later and Docker (the explorer runs as a container next to the emulator).
 Keep every `Aspire.*` package of your AppHost at the same version as its SDK (`Aspire.AppHost.Sdk`): mixing versions
 fails at startup with errors such as `Unable to resolve service for type 'Aspire.Hosting.Publishing.IContainerRuntime'`.
+
+## Screenshots
+
+| Search the whole container | Sort by any column |
+| --- | --- |
+| ![Searching for "report" in the whole documents container, with the folder of each match in front of its name](assets/screenshots/search.png) | ![A folder of log files sorted by size, largest first](assets/screenshots/sort.png) |
+
+| Confirm before deleting | Light and dark themes |
+| --- | --- |
+| ![The confirmation to delete a blob, which lists the account, container, blob and size](assets/screenshots/delete.png) | ![The same folder in the light theme](assets/screenshots/light.png) |
 
 ## Usage
 
@@ -53,6 +65,8 @@ Set it with `dotnet user-secrets set "Parameters:explorer-connection" "<connecti
 You can also change the account from the page (click the account name at the top right to open **Change connection**),
 even on a running explorer. The connection is
 checked before switching, and **Use the AppHost connection** goes back to the default.
+
+![The Change connection dialog, with a field for the connection string](assets/screenshots/connection.png)
 
 Inside the container `localhost` is the container itself, so `localhost`, `127.0.0.1`, `[::1]` and
 `UseDevelopmentStorage=true` are mapped to `host.docker.internal`. That lets you reuse the connection string of an
