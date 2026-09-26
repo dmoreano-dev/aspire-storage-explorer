@@ -1,0 +1,13 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.5.4">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UserSecretsId>daa43906-9bb6-4a85-a1fa-67405ebffd3f</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\StorageExplorer.Aspire.Hosting\StorageExplorer.Aspire.Hosting.csproj" IsAspireProjectResource="false" />
+    <ProjectReference Include="..\Sample.Seeder\Sample.Seeder.csproj" />
+  </ItemGroup>
+
+</Project>
