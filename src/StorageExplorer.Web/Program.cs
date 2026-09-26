@@ -22,7 +22,8 @@ builder.Services
         {
             rewriteLogged = true;
             loggerFactory.CreateLogger("StorageExplorer").LogInformation(
-                "The connection string points to localhost, which is this container. Using {Host} to reach the host machine instead.",
+                "The connection string has hosts that do not work from this container: localhost is this container, so {Host} " +
+                "is used to reach the host machine, and a <name>.dev.internal host is used as <name>, which Azurite accepts.",
                 LoopbackHostRewriter.HostGateway);
         }
 

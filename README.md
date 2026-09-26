@@ -7,6 +7,8 @@ It is meant for local development with the Azurite emulator, so you don't need a
 modified), download a blob, and delete a blob after a confirmation that names the account.
 
 **Requirements:** .NET 10, Aspire 13.1 or later and Docker (the explorer runs as a container next to the emulator).
+Keep every `Aspire.*` package of your AppHost at the same version as its SDK (`Aspire.AppHost.Sdk`): mixing versions
+fails at startup with errors such as `Unable to resolve service for type 'Aspire.Hosting.Publishing.IContainerRuntime'`.
 
 ## Usage
 
@@ -51,8 +53,9 @@ checked before switching, and **Use the AppHost connection** goes back to the de
 Inside the container `localhost` is the container itself, so `localhost`, `127.0.0.1`, `[::1]` and
 `UseDevelopmentStorage=true` are mapped to `host.docker.internal`. That lets you reuse the connection string of an
 Azurite or Azure Storage Explorer running on your machine as is. It relies on Docker Desktop (on Linux Docker Engine you
-may need `--add-host=host.docker.internal:host-gateway`, not tested). Connection strings for a real Azure account are
-left untouched.
+may need `--add-host=host.docker.internal:host-gateway`, not tested). A `<name>.dev.internal` host, which is how Aspire
+names a container for the others, is used as `<name>`: Azurite reads a host with a dot as `<account>.blob...` and
+rejects it with an empty 400. Connection strings for a real Azure account are left untouched.
 
 ## Try the sample
 

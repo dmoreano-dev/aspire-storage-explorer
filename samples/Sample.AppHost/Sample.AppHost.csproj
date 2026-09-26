@@ -6,6 +6,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Same version as the SDK above: Aspire packages of different versions do not work together. -->
+    <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="13.5.4" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\StorageExplorer.Aspire.Hosting\StorageExplorer.Aspire.Hosting.csproj" IsAspireProjectResource="false" />
     <ProjectReference Include="..\Sample.Seeder\Sample.Seeder.csproj" />
   </ItemGroup>

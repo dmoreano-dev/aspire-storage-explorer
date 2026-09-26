@@ -4,6 +4,16 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 versions follow [SemVer](https://semver.org/). The release workflow publishes the section that matches the tag, so set
 the date when you tag.
 
+## [0.1.2] - 2026-09-26
+
+### Fixed
+
+- The explorer could not read the emulator: every request failed with an empty `400 Bad Request` from Azurite, both
+  with the connection string from the AppHost and with one typed in **Change connection**. Aspire gives containers the
+  host `storage.dev.internal`, and Azurite reads a host with a dot as `{account}.blob...`, so it looked for an account
+  called `storage`. A `{name}.dev.internal` host in the connection string is now used as `{name}`, which is also a
+  network alias of the container and which Azurite accepts.
+
 ## [0.1.1] - 2026-09-26
 
 ### Changed

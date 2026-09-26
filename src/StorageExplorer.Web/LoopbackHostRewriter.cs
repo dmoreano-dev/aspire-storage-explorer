@@ -3,9 +3,14 @@ using System.Text.RegularExpressions;
 namespace StorageExplorer.Web;
 
 /// <summary>
-/// Inside a container <c>localhost</c> is the container itself, but an emulator or a desktop tool usually runs on the
-/// host machine. This maps the loopback hosts of a connection string to the host, so the same connection string
-/// used from the host works here.
+/// Maps the hosts of a connection string that do not work from inside the explorer container.
+/// <list type="bullet">
+/// <item>Inside a container <c>localhost</c> is the container itself, but an emulator or a desktop tool usually runs on
+/// the host machine, so the loopback hosts become the host, and the same connection string used from the host works here.</item>
+/// <item>Aspire reaches a container from another one as <c>{name}.dev.internal</c>. Azurite reads a host with a dot as
+/// <c>{account}.blob...</c> and looks for an account called <c>{name}</c>, which fails with an empty 400. The plain
+/// <c>{name}</c> is also a network alias of that container, and Azurite reads the account from the path for it.</item>
+/// </list>
 /// </summary>
 internal static partial class LoopbackHostRewriter
 {
@@ -28,12 +33,19 @@ internal static partial class LoopbackHostRewriter
         if (string.IsNullOrEmpty(connectionString))
             return connectionString;
 
-        return DevelopmentStorageShortcut().IsMatch(connectionString) ? DevelopmentStorage : LoopbackHost().Replace(connectionString, HostGateway);
+        if (DevelopmentStorageShortcut().IsMatch(connectionString))
+            return DevelopmentStorage;
+
+        return DevInternalHost().Replace(LoopbackHost().Replace(connectionString, HostGateway), "$1");
     }
 
     // The host right after the "//" of an endpoint URI: http://127.0.0.1:10000/... or http://localhost/...
     [GeneratedRegex(@"(?<=//)(localhost|127\.0\.0\.1|\[::1\])(?=[:/;]|$)", RegexOptions.IgnoreCase)]
     private static partial Regex LoopbackHost();
+
+    // The host right after the "//" that Aspire gives to containers, http://storage.dev.internal:10000/...: the name is the group.
+    [GeneratedRegex(@"(?<=//)([A-Za-z0-9-]+)\.dev\.internal(?=[:/;]|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex DevInternalHost();
 
     [GeneratedRegex(@"(^|;)\s*UseDevelopmentStorage\s*=\s*true\s*(;|$)", RegexOptions.IgnoreCase)]
     private static partial Regex DevelopmentStorageShortcut();
