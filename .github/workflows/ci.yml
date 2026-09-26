@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build StorageExplorer.slnx --configuration Release -p:ContinuousIntegrationBuild=true
+
+      - name: Pack
+        run: dotnet pack src/StorageExplorer.Aspire.Hosting --configuration Release --no-build --output artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: artifacts/*
+          if-no-files-found: error
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Builds both architectures without pushing, to catch Dockerfile problems before a release.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/StorageExplorer.Web/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
