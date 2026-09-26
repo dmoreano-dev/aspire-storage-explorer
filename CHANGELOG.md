@@ -6,6 +6,25 @@ the date when you tag.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-26
+
+### Added
+
+- Search by name: type in the box above the list to find the blobs whose name contains the text (not case sensitive) in
+  the folder you are in and in every folder below it. A result shows its path below that folder, and the folder part
+  links to where the blob is. Opening another folder clears the search. The search reads at most 50,000 blobs and shows
+  at most 5,000 matches; when it stops at one of those limits the page says so. It is served by
+  `GET /api/containers/{container}/search?prefix=&q=`.
+- Search containers: a box above the container list narrows it by name (not case sensitive), and Enter opens the first
+  match. It is cleared when you change the connection.
+- Sort the list by name, size, type or last modified date by clicking a column header; click it again to reverse.
+  Folders always stay on top. The sort is kept when you open another folder.
+
+### Changed
+
+- The default order is now by name in natural order (`file2` before `file10`, and not case sensitive). Before, it was
+  the order the storage account returns, which is by character code.
+
 ## [0.2.0] - 2026-09-26
 
 ### Added

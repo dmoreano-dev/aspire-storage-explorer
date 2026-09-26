@@ -19,19 +19,24 @@
   <div class="layout">
     <nav class="sidebar" aria-label="Containers">
       <h2>Containers</h2>
+      <input id="container-filter" type="search" placeholder="Search containers" aria-label="Search containers" autocomplete="off" spellcheck="false" hidden>
       <ul id="containers"></ul>
     </nav>
 
     <main class="content">
       <nav id="breadcrumb" class="breadcrumb" aria-label="Path"></nav>
+      <div id="toolbar" class="toolbar" hidden>
+        <input id="filter" type="search" placeholder="Search in this folder and below" aria-label="Search by name in this folder and below" autocomplete="off" spellcheck="false">
+        <span id="filter-count" class="filter-count" role="status"></span>
+      </div>
       <p id="message" class="message" hidden></p>
       <table id="entries" hidden>
         <thead>
           <tr>
-            <th>Name</th>
-            <th class="num">Size</th>
-            <th>Type</th>
-            <th>Last modified</th>
+            <th data-sort="name"><button type="button" class="sort">Name <span class="arrow" aria-hidden="true"></span></button></th>
+            <th data-sort="size" class="num"><button type="button" class="sort">Size <span class="arrow" aria-hidden="true"></span></button></th>
+            <th data-sort="type"><button type="button" class="sort">Type <span class="arrow" aria-hidden="true"></span></button></th>
+            <th data-sort="modified"><button type="button" class="sort">Last modified <span class="arrow" aria-hidden="true"></span></button></th>
             <th class="actions"><span class="sr-only">Actions</span></th>
           </tr>
         </thead>

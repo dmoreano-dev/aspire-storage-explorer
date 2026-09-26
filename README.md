@@ -3,9 +3,10 @@
 An [Aspire](https://aspire.dev) hosting integration that adds a small web UI to browse an Azure Blob Storage account.
 It is meant for local development with the Azurite emulator, so you don't need a separate storage explorer.
 
-**Features (v0.1):** list containers, navigate folders with a breadcrumb, list blobs (name, size, content type, last
-modified), download a blob, and delete a blob after a confirmation that names the account. Deleting is only enabled for
-local endpoints unless you say otherwise (see [Read-only](#read-only)).
+**Features:** list and search containers, navigate folders with a breadcrumb, list blobs (name, size, content type,
+last modified), search them by name in a folder and everything below it, sort by any column, download a blob, and
+delete a blob after a confirmation that names the account. Deleting is only enabled for local endpoints unless you say
+otherwise (see [Read-only](#read-only)).
 
 **Requirements:** .NET 10, Aspire 13.1 or later and Docker (the explorer runs as a container next to the emulator).
 Keep every `Aspire.*` package of your AppHost at the same version as its SDK (`Aspire.AppHost.Sdk`): mixing versions
@@ -115,6 +116,8 @@ first; it gets the same tag the extension uses, so the sample runs it:
 ## Limitations
 
 - Blob Storage only (no queues, tables or file shares). Each folder listing is capped at 5,000 entries.
+- Azure can only filter blobs by prefix, so a search reads the listing and filters it: it stops after 50,000 blobs or
+  5,000 matches, and the page tells you when it did.
 - Keep the storage resource on `RunAsEmulator()`. Without it Aspire provisions Azure resources and the explorer waits
   for them.
 - Only account connection strings with a key work; Entra ID is not supported yet.

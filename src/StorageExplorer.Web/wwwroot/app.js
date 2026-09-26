@@ -5,9 +5,14 @@ const JSON_HEADERS = { ...REQUEST_HEADERS, 'Content-Type': 'application/json' };
 
 const els = {
   containers: document.getElementById('containers'),
+  containerFilter: document.getElementById('container-filter'),
   breadcrumb: document.getElementById('breadcrumb'),
   message: document.getElementById('message'),
+  toolbar: document.getElementById('toolbar'),
+  filter: document.getElementById('filter'),
+  filterCount: document.getElementById('filter-count'),
   table: document.getElementById('entries'),
+  sortHeaders: document.querySelectorAll('#entries th[data-sort]'),
   tbody: document.querySelector('#entries tbody'),
   status: document.getElementById('status'),
   refresh: document.getElementById('refresh'),
@@ -32,6 +37,26 @@ let connection = null;
 let containers = [];
 let renderToken = 0;
 let statusTimer;
+
+// The folder on screen, kept so that sorting and clearing the search do not need another request.
+let listed = null;
+let listedLocation = null;
+// What the search box found in that folder and below it, or null while the box is empty.
+let found = null;
+let searchToken = 0;
+let searchTimer;
+let sort = { key: 'name', direction: 1 };
+
+// Wait for a pause in typing before searching, since every search reads the listing from the account.
+const SEARCH_DELAY_MS = 250;
+
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+const sortValues = {
+  name: (entry) => entry.name,
+  size: (entry) => entry.size,
+  type: (entry) => entry.contentType,
+  modified: (entry) => (entry.lastModified ? Date.parse(entry.lastModified) : null),
+};
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -127,16 +152,27 @@ const blobUrl = (container, path) => `${containerUrl(container)}/blob?path=${enc
 
 // --- Rendering -----------------------------------------------------------------
 
+const containerTerm = () => els.containerFilter.value.trim();
+
+function matchingContainers() {
+  const needle = containerTerm().toLowerCase();
+  return containers.filter((container) => container.name.toLowerCase().includes(needle));
+}
+
 function renderContainers(active) {
-  els.containers.replaceChildren(
-    ...containers.map((container) => {
-      const item = el('li');
-      const anchor = link(hashFor(container.name), container.name);
-      if (container.name === active) anchor.setAttribute('aria-current', 'page');
-      item.append(anchor);
-      return item;
-    }),
-  );
+  const matching = matchingContainers();
+  const items = matching.map((container) => {
+    const item = el('li');
+    const anchor = link(hashFor(container.name), container.name);
+    if (container.name === active) anchor.setAttribute('aria-current', 'page');
+    item.append(anchor);
+    return item;
+  });
+
+  if (containers.length > 0 && matching.length === 0) items.push(el('li', 'empty', 'No containers match.'));
+
+  els.containerFilter.hidden = containers.length === 0;
+  els.containers.replaceChildren(...items);
 }
 
 function renderBreadcrumb(container, prefix) {
@@ -157,20 +193,103 @@ function renderBreadcrumb(container, prefix) {
   );
 }
 
-function showTable(visible) {
-  els.table.hidden = !visible;
+function hideListing() {
+  listed = null;
+  found = null;
+  els.table.hidden = true;
+  els.toolbar.hidden = true;
 }
 
-function renderEntries(container, listing) {
-  els.tbody.replaceChildren(...listing.entries.map((entry) => renderRow(container, entry)));
+// Folders stay on top whatever the column and the direction. They have no size, type or date, so they go by name.
+function compareEntries(a, b) {
+  if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
 
-  showTable(listing.entries.length > 0);
-  if (listing.entries.length === 0) {
+  const key = a.isFolder ? 'name' : sort.key;
+  const direction = key === sort.key ? sort.direction : 1;
+  const left = sortValues[key](a);
+  const right = sortValues[key](b);
+  const byName = collator.compare(a.name, b.name);
+
+  if (left == null || right == null) {
+    // A missing value goes last in both directions.
+    return left == null && right == null ? byName : left == null ? 1 : -1;
+  }
+
+  const result = typeof left === 'number' ? left - right : collator.compare(left, right);
+  return result * direction || byName;
+}
+
+function renderSortHeaders() {
+  for (const header of els.sortHeaders) {
+    const active = header.dataset.sort === sort.key;
+    if (active) {
+      header.setAttribute('aria-sort', sort.direction === 1 ? 'ascending' : 'descending');
+    } else {
+      header.removeAttribute('aria-sort');
+    }
+    header.querySelector('.arrow').textContent = active ? (sort.direction === 1 ? '▲' : '▼') : '';
+  }
+}
+
+function sortBy(key) {
+  sort = { key, direction: sort.key === key ? -sort.direction : 1 };
+  renderEntries();
+}
+
+const currentTerm = () => els.filter.value.trim();
+
+// Shows the folder, or what the search box found in it and below it.
+function renderEntries() {
+  if (!listed) return;
+
+  const { container, listing: folder } = listed;
+  const listing = found ? found.listing : folder;
+  const entries = [...listing.entries].sort(compareEntries);
+
+  els.tbody.replaceChildren(...entries.map((entry) => renderRow(container, entry)));
+  renderSortHeaders();
+
+  els.table.hidden = entries.length === 0;
+  els.toolbar.hidden = folder.entries.length === 0;
+  els.filterCount.textContent = found ? `${entries.length} found` : '';
+
+  if (folder.entries.length === 0) {
     showMessage('This folder is empty.');
+  } else if (found) {
+    const limit = listing.truncated ? 'The search stopped at its limit, so there may be more matches.' : '';
+    showMessage(entries.length === 0 ? `No blobs match "${found.term}" in this folder or below. ${limit}`.trim() : limit);
   } else if (listing.truncated) {
-    showMessage(`Listing truncated: showing the first ${listing.entries.length} entries.`);
+    showMessage(`Listing truncated: showing the first ${entries.length} entries.`);
   } else {
     showMessage('');
+  }
+}
+
+// Looks for the text of the search box in the folder on screen and in every folder below it.
+async function search() {
+  if (!listed) return;
+
+  const token = ++searchToken;
+  const term = currentTerm();
+  if (!term) {
+    found = null;
+    renderEntries();
+    return;
+  }
+
+  const { container, prefix } = listed;
+  els.filterCount.textContent = 'Searching…';
+  try {
+    const listing = await getJson(
+      `${containerUrl(container)}/search?prefix=${encodeURIComponent(prefix)}&q=${encodeURIComponent(term)}`);
+    if (token !== searchToken) return;
+    found = { term, listing };
+    renderEntries();
+  } catch (error) {
+    if (token !== searchToken) return;
+    found = null;
+    renderEntries();
+    showMessage(`Could not search "${container}": ${error.message}`, true);
   }
 }
 
@@ -179,7 +298,17 @@ function renderRow(container, entry) {
 
   const name = el('td', 'name');
   name.append(el('span', 'icon', entry.isFolder ? '📁' : '📄'));
-  name.append(entry.isFolder ? link(hashFor(container, entry.path), entry.name) : el('span', undefined, entry.name));
+  if (entry.isFolder) {
+    name.append(link(hashFor(container, entry.path), entry.name));
+  } else {
+    // A search result is named by its path below the folder searched: the folder part links to where the blob is.
+    const slash = entry.name.lastIndexOf('/');
+    if (slash !== -1) {
+      const folder = entry.path.slice(0, entry.path.length - entry.name.length + slash + 1);
+      name.append(link(hashFor(container, folder), entry.name.slice(0, slash + 1)));
+    }
+    name.append(el('span', undefined, entry.name.slice(slash + 1)));
+  }
 
   const actions = el('td', 'actions');
   if (!entry.isFolder) {
@@ -208,21 +337,38 @@ async function render() {
   const token = ++renderToken;
   const { container, prefix } = parseLocation();
 
+  // A search in flight is about a listing that is being replaced.
+  searchToken++;
+  clearTimeout(searchTimer);
+
   renderContainers(container);
   renderBreadcrumb(container, prefix);
 
+  // A search applies to the folder it was typed in.
+  const locationKey = `${container}/${prefix}`;
+  if (locationKey !== listedLocation) {
+    listedLocation = locationKey;
+    els.filter.value = '';
+  }
+
   if (!container) {
-    showTable(false);
+    hideListing();
     showMessage(containers.length === 0 ? 'No containers found.' : 'Select a container to browse its blobs.');
     return;
   }
 
   try {
     const listing = await getJson(`${containerUrl(container)}/entries?prefix=${encodeURIComponent(prefix)}`);
-    if (token === renderToken) renderEntries(container, listing);
+    if (token !== renderToken) return;
+    listed = { container, prefix, listing };
+    found = null;
+
+    // After a refresh or a delete the search box may still have text: search again.
+    if (currentTerm()) await search();
+    else renderEntries();
   } catch (error) {
     if (token !== renderToken) return;
-    showTable(false);
+    hideListing();
     showMessage(`Could not list "${container}": ${error.message}`, true);
   }
 }
@@ -324,6 +470,7 @@ function openConnectionDialog() {
 // The account changed, so the containers and the current path no longer apply.
 async function connectionChanged(info) {
   connection = info;
+  els.containerFilter.value = '';
   els.connectionDialog.close();
   history.replaceState(null, '', '#/');
   setStatus(`Connected to ${info.accountName}`);
@@ -367,6 +514,21 @@ els.connectionForm.addEventListener('submit', (event) => {
   });
 });
 els.connectionReset.addEventListener('click', () => sendConnection({ method: 'DELETE', headers: REQUEST_HEADERS }));
+
+els.containerFilter.addEventListener('input', () => renderContainers(parseLocation().container));
+els.containerFilter.addEventListener('keydown', (event) => {
+  // Enter opens the first container that matches.
+  const [first] = matchingContainers();
+  if (event.key === 'Enter' && containerTerm() && first) location.hash = hashFor(first.name);
+});
+
+els.filter.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(search, currentTerm() ? SEARCH_DELAY_MS : 0);
+});
+for (const header of els.sortHeaders) {
+  header.querySelector('button').addEventListener('click', () => sortBy(header.dataset.sort));
+}
 
 els.refresh.addEventListener('click', refresh);
 window.addEventListener('hashchange', render);

@@ -23,6 +23,9 @@
 
 * { box-sizing: border-box; }
 
+/* A rule such as display: flex would otherwise win over the hidden attribute. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -75,7 +78,9 @@ button.danger { color: var(--danger); }
   background: var(--surface);
 }
 .sidebar h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; color: var(--muted); }
+.sidebar input { display: block; margin-bottom: 8px; }
 .sidebar ul { margin: 0; padding: 0; list-style: none; }
+.sidebar .empty { padding: 4px 8px; color: var(--muted); }
 .sidebar a { display: block; padding: 4px 8px; border-radius: 6px; overflow-wrap: anywhere; }
 .sidebar a[aria-current="page"] { background: var(--accent); color: var(--bg); }
 
@@ -86,9 +91,34 @@ button.danger { color: var(--danger); }
 .message { color: var(--muted); }
 .message.error { color: var(--danger); }
 
+.toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.toolbar input, .sidebar input {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  width: min(320px, 100%);
+}
+.toolbar input { background: var(--surface); }
+.toolbar input:focus-visible, .sidebar input:focus-visible { border-color: var(--accent); }
+.filter-count { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); }
 th { font-size: 12px; text-transform: uppercase; color: var(--muted); }
+th button.sort {
+  font: inherit;
+  text-transform: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+th button.sort:hover, th[aria-sort] button.sort { color: var(--text); }
+th .arrow { display: inline-block; min-width: 1em; }
 td.name { overflow-wrap: anywhere; }
 .icon { margin-right: 8px; }
 .num { text-align: right; white-space: nowrap; }
