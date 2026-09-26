@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Storage Explorer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Storage Explorer</h1>
+    <span id="connection" class="connection"></span>
+    <span id="status" class="status" role="status"></span>
+    <button id="change-connection" type="button">Change connection</button>
+    <button id="refresh" type="button">Refresh</button>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar" aria-label="Containers">
+      <h2>Containers</h2>
+      <ul id="containers"></ul>
+    </nav>
+
+    <main class="content">
+      <nav id="breadcrumb" class="breadcrumb" aria-label="Path"></nav>
+      <p id="message" class="message" hidden></p>
+      <table id="entries" hidden>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th class="num">Size</th>
+            <th>Type</th>
+            <th>Last modified</th>
+            <th class="actions"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </main>
+  </div>
+
+  <dialog id="confirm-dialog">
+    <form method="dialog">
+      <p id="confirm-text"></p>
+      <menu>
+        <button value="cancel">Cancel</button>
+        <button value="confirm" class="danger">Delete</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="connection-dialog">
+    <form id="connection-form">
+      <h2>Change connection</h2>
+      <p class="hint">
+        Paste a storage account connection string, with its account key. It is kept in memory only,
+        never shown again, and forgotten when the explorer restarts.
+      </p>
+      <label for="connection-string">Connection string</label>
+      <input id="connection-string" type="password" autocomplete="off" spellcheck="false" required>
+      <label class="inline"><input id="connection-show" type="checkbox"> Show</label>
+      <p id="connection-error" class="message error" role="alert" hidden></p>
+      <menu>
+        <button id="connection-reset" type="button" hidden>Use the AppHost connection</button>
+        <button id="connection-cancel" type="button">Cancel</button>
+        <button id="connection-submit" type="submit">Connect</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

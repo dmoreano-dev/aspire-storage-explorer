@@ -1,0 +1,55 @@
+using Azure;
+using Microsoft.AspNetCore.Diagnostics;
+
+namespace StorageExplorer.Web;
+
+/// <summary>Turns storage failures (missing container, bad request, ...) into problem details responses.</summary>
+internal sealed class StorageExceptionHandler(IProblemDetailsService problemDetailsService) : IExceptionHandler
+{
+    public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
+    {
+        // When every retry fails the SDK throws an AggregateException that wraps the RequestFailedException.
+        var storageException = exception switch
+        {
+            RequestFailedException failed => failed,
+            AggregateException aggregate => aggregate.InnerExceptions.OfType<RequestFailedException>().FirstOrDefault(),
+            _ => null,
+        };
+
+        if (storageException is null)
+            return false;
+
+        var status = storageException.Status is >= 400 and < 600
+            ? storageException.Status
+            : StatusCodes.Status502BadGateway;
+
+        httpContext.Response.StatusCode = status;
+
+        return await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
+        {
+            HttpContext = httpContext,
+            Exception = exception,
+            ProblemDetails =
+            {
+                Status = status,
+                Title = "Storage request failed",
+                Detail = Describe(storageException),
+            },
+        });
+    }
+
+    private static string Describe(RequestFailedException exception)
+    {
+        if (exception.ErrorCode is { Length: > 0 } code)
+            return $"{code}: {exception.Message}";
+
+        // Status 0 means there was no HTTP response at all: the endpoint could not be reached.
+        if (exception.Status != 0)
+            return exception.Message;
+
+        return LoopbackHostRewriter.RunningInContainer
+            ? $"{exception.Message}. Check that the service is running and listening on that port; from this container, " +
+              $"localhost and 127.0.0.1 are reached through {LoopbackHostRewriter.HostGateway}."
+            : $"{exception.Message}. Check that the service is running and listening on that port.";
+    }
+}

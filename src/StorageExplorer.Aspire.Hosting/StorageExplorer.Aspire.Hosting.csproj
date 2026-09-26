@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Aspire.Hosting</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <PackageId>StorageExplorer.Aspire.Hosting</PackageId>
+    <Version>0.1.0</Version>
+    <Description>Aspire hosting integration that adds a web-based Azure Storage blob explorer to the AppHost.</Description>
+    <PackageTags>aspire integration hosting azure storage blob explorer azurite</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Authors>Daniel Moreano</Authors>
+    <Copyright>Copyright (c) 2026 Daniel Moreano</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+
+    <!-- The repository URL comes from the git remote; the release workflow also sets PackageProjectUrl. -->
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="13.5.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

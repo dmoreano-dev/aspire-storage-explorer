@@ -1,0 +1,9 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.DotSettings.user
+.DS_Store
+artifacts/
+docs/
