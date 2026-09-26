@@ -4,6 +4,14 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 versions follow [SemVer](https://semver.org/). The release workflow publishes the section that matches the tag, so set
 the date when you tag.
 
+## [0.1.1] - 2026-09-26
+
+### Changed
+
+- Lowered the minimum `Aspire.Hosting.Azure.Storage` version from 13.5.4 to 13.1.0, so the package installs in
+  AppHosts on Aspire 13.1 or later. Before, an AppHost on an older Aspire 13 failed to restore with `NU1605`
+  (package downgrade).
+
 ## [0.1.0] - 2026-09-26
 
 First release.
