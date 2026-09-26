@@ -4,9 +4,10 @@ An [Aspire](https://aspire.dev) hosting integration that adds a small web UI to 
 It is meant for local development with the Azurite emulator, so you don't need a separate storage explorer.
 
 **Features:** list and search containers, navigate folders with a breadcrumb, list blobs (name, size, content type,
-last modified), search them by name in a folder and everything below it, sort by any column, download a blob, and
-delete a blob after a confirmation that names the account. Deleting is only enabled for local endpoints unless you say
-otherwise (see [Read-only](#read-only)).
+last modified), search them by name in a folder and everything below it or in the whole container, sort by any column,
+download a blob, and delete a blob after a confirmation that names the account (on an account that is not on your
+machine you also type the name of the blob). Deleting is only enabled for local endpoints unless you say otherwise (see
+[Read-only](#read-only)).
 
 **Requirements:** .NET 10, Aspire 13.1 or later and Docker (the explorer runs as a container next to the emulator).
 Keep every `Aspire.*` package of your AppHost at the same version as its SDK (`Aspire.AppHost.Sdk`): mixing versions
@@ -49,7 +50,8 @@ storage.WithStorageExplorer(c => c.WithEnvironment("StorageExplorer__ConnectionS
 
 Set it with `dotnet user-secrets set "Parameters:explorer-connection" "<connection string>"`.
 
-You can also change the account from the page (**Change connection**), even on a running explorer. The connection is
+You can also change the account from the page (click the account name at the top right to open **Change connection**),
+even on a running explorer. The connection is
 checked before switching, and **Use the AppHost connection** goes back to the default.
 
 Inside the container `localhost` is the container itself, so `localhost`, `127.0.0.1`, `[::1]` and
@@ -76,8 +78,8 @@ storage.WithStorageExplorer(readOnly: false);  // the AppHost connection can del
 | not set | local: can delete. Remote: read-only | local: can delete. Remote: read-only, unless you tick **Allow changes on this account, at my own risk** |
 | `false` | can delete | same as not set |
 
-The page shows a **Read-only** badge, or **Writable · own risk** for a remote account you allowed changes on, and hides
-Delete when it is read-only. The server enforces it too: a delete answers `403` whatever the page does. The choice to
+The status bar at the bottom of the page shows **Read-only**, or **Writable · own risk** (with a red banner) for a
+remote account you allowed changes on, and the page hides Delete when it is read-only. The server enforces it too: a delete answers `403` whatever the page does. The choice to
 allow changes is not saved: it is asked again for every connection and lost when the explorer restarts. A host that is
 not recognized as local counts as remote.
 

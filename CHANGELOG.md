@@ -6,6 +6,30 @@ the date when you tag.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-26
+
+### Added
+
+- **Whole container** next to the search box: the search can now cover the whole container, and not only the folder you
+  are in and everything below it.
+- Press `/` to jump to the container search.
+- A theme button next to Refresh cycles **System**, **Light** and **Dark**. System, the default, follows the theme of the
+  operating system as before. The choice is kept in a cookie, not in `localStorage`, because Aspire gives the explorer a
+  different port on each run and a cookie is shared by every port of `localhost`.
+
+### Changed
+
+- New look for the page. The account and Refresh are in the top bar, and the state of the connection is in the status bar
+  at the bottom: green for a local account, blue for a remote one that is read-only, and red, with a banner, for a
+  remote one you allowed changes on. Files show a colored tile by type, Download and Delete appear when you point at a
+  row, dates read "Today, 9:14 AM" (the full date is in the tooltip). The page makes no requests to other sites: it
+  uses the fonts of the system. The colors use `light-dark()`, so it needs Chrome or Edge 123, Firefox 120 or Safari 17.5,
+  or later.
+- Deleting on an account that is not on your machine asks you to type the name of the blob. The confirmation now lists
+  the account, container, blob and size.
+- A **Blobs | Queues | Tables** switch sits above the list of containers. Only Blobs works: Queues and Tables are
+  disabled until they are implemented.
+
 ## [0.3.0] - 2026-09-26
 
 ### Added

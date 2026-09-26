@@ -4,53 +4,129 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Storage Explorer</title>
+  <script>
+    // Applies the theme that was saved before the first paint, so the page does not flash the other one.
+    // The cookie is read here and written in app.js; see the note there on why it is a cookie.
+    try {
+      var savedTheme = /(?:^|; )storage-explorer-theme=(light|dark)/.exec(document.cookie);
+      if (savedTheme) document.documentElement.dataset.theme = savedTheme[1];
+    } catch (e) { /* cookies are blocked: the theme follows the system */ }
+  </script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="topbar">
-    <h1>Storage Explorer</h1>
-    <span id="connection" class="connection"></span>
-    <span id="access" class="badge" hidden></span>
-    <span id="status" class="status" role="status"></span>
-    <button id="change-connection" type="button">Change connection</button>
-    <button id="refresh" type="button">Refresh</button>
-  </header>
+  <div class="app" data-tone="unknown">
+    <div id="risk-banner" class="risk-banner" role="status" hidden>
+      <i data-icon="alert"></i>
+      <span>This account is not on this machine and changes are allowed, at your own risk. Deleted blobs are gone for good.</span>
+    </div>
 
-  <div class="layout">
-    <nav class="sidebar" aria-label="Containers">
-      <h2>Containers</h2>
-      <input id="container-filter" type="search" placeholder="Search containers" aria-label="Search containers" autocomplete="off" spellcheck="false" hidden>
-      <ul id="containers"></ul>
-    </nav>
-
-    <main class="content">
-      <nav id="breadcrumb" class="breadcrumb" aria-label="Path"></nav>
-      <div id="toolbar" class="toolbar" hidden>
-        <input id="filter" type="search" placeholder="Search in this folder and below" aria-label="Search by name in this folder and below" autocomplete="off" spellcheck="false">
-        <span id="filter-count" class="filter-count" role="status"></span>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark"><i data-icon="container"></i></span>
+        <h1>Storage Explorer</h1>
       </div>
-      <p id="message" class="message" hidden></p>
-      <table id="entries" hidden>
-        <thead>
-          <tr>
-            <th data-sort="name"><button type="button" class="sort">Name <span class="arrow" aria-hidden="true"></span></button></th>
-            <th data-sort="size" class="num"><button type="button" class="sort">Size <span class="arrow" aria-hidden="true"></span></button></th>
-            <th data-sort="type"><button type="button" class="sort">Type <span class="arrow" aria-hidden="true"></span></button></th>
-            <th data-sort="modified"><button type="button" class="sort">Last modified <span class="arrow" aria-hidden="true"></span></button></th>
-            <th class="actions"><span class="sr-only">Actions</span></th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </main>
+      <button id="change-connection" class="connection-chip" type="button" title="Change connection">
+        <span class="dot"></span>
+        <span id="connection-account" class="chip-account"></span>
+        <span id="connection-kind" class="chip-kind"></span>
+        <i class="chip-chevron" data-icon="chevron-down"></i>
+      </button>
+      <button id="refresh" class="icon-button outlined large" type="button" aria-label="Refresh" title="Refresh">
+        <i data-icon="refresh"></i>
+      </button>
+      <button id="theme" class="icon-button outlined large" type="button"></button>
+    </header>
+
+    <div class="layout">
+      <nav class="sidebar" aria-label="Containers">
+        <div class="service-switch" role="group" aria-label="Storage service">
+          <button type="button" aria-pressed="true"><i data-icon="container"></i>Blobs</button>
+          <button type="button" aria-disabled="true" title="Queues are not supported yet"><i data-icon="layers"></i>Queues</button>
+          <button type="button" aria-disabled="true" title="Tables are not supported yet"><i data-icon="table"></i>Tables</button>
+        </div>
+
+        <div class="list-heading">
+          <h2>Containers</h2>
+          <span id="container-count" class="count"></span>
+        </div>
+        <div id="container-filter-field" class="search-field" hidden>
+          <i data-icon="search"></i>
+          <input id="container-filter" type="search" placeholder="Search containers" aria-label="Search containers" autocomplete="off" spellcheck="false">
+          <kbd title="Press / to search containers">/</kbd>
+        </div>
+        <ul id="containers"></ul>
+      </nav>
+
+      <main class="panel">
+        <div class="panel-head">
+          <nav id="breadcrumb" class="breadcrumb" aria-label="Path"></nav>
+          <h2 id="title" class="title"></h2>
+        </div>
+
+        <div id="toolbar" class="toolbar" hidden>
+          <div class="search-field wide">
+            <i data-icon="search"></i>
+            <input id="filter" type="search" placeholder="Search by name" aria-label="Search by name" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="scope" role="group" aria-label="Search scope">
+            <button type="button" data-scope="folder" aria-pressed="true">This folder and below</button>
+            <button type="button" data-scope="container" aria-pressed="false">Whole container</button>
+          </div>
+          <span id="filter-count" class="filter-count" role="status"></span>
+        </div>
+
+        <p id="message" class="message" hidden></p>
+
+        <div id="listing" class="listing" hidden>
+          <table id="entries">
+            <thead>
+              <tr>
+                <th data-sort="name" class="col-name"><button type="button" class="sort">Name <span class="arrow" aria-hidden="true"></span></button></th>
+                <th data-sort="type" class="col-type"><button type="button" class="sort">Type <span class="arrow" aria-hidden="true"></span></button></th>
+                <th data-sort="size" class="col-size num"><button type="button" class="sort">Size <span class="arrow" aria-hidden="true"></span></button></th>
+                <th data-sort="modified" class="col-modified"><button type="button" class="sort">Modified <span class="arrow" aria-hidden="true"></span></button></th>
+                <th class="col-actions"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+
+    <footer class="statusbar">
+      <div class="status-left">
+        <span class="source"><span class="dot"></span><span id="status-source"></span></span>
+        <span id="status-endpoint" class="mono"></span>
+        <span id="status-path" class="mono"></span>
+      </div>
+      <span id="status" class="status" role="status"></span>
+      <div class="status-right">
+        <span id="access" class="access" hidden></span>
+        <span id="item-count"></span>
+      </div>
+    </footer>
   </div>
 
-  <dialog id="confirm-dialog">
-    <form method="dialog">
-      <p id="confirm-text"></p>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <form id="confirm-form" method="dialog">
+      <span class="dialog-icon"><i data-icon="trash"></i></span>
+      <h2 id="confirm-title">Delete this blob permanently?</h2>
+      <p id="confirm-text" class="hint"></p>
+      <dl class="details">
+        <div><dt>Account</dt><dd id="confirm-account"></dd></div>
+        <div><dt>Container</dt><dd id="confirm-container"></dd></div>
+        <div><dt>Blob</dt><dd id="confirm-blob"></dd></div>
+        <div><dt>Size</dt><dd id="confirm-size"></dd></div>
+      </dl>
+      <div id="confirm-name-field" class="field" hidden>
+        <label for="confirm-name">Type <code id="confirm-name-hint"></code> to confirm</label>
+        <input id="confirm-name" type="text" autocomplete="off" spellcheck="false">
+      </div>
       <menu>
-        <button value="cancel">Cancel</button>
-        <button value="confirm" class="danger">Delete</button>
+        <button id="confirm-cancel" type="button">Cancel</button>
+        <button id="confirm-submit" type="submit" value="confirm" class="danger-solid">Delete permanently</button>
       </menu>
     </form>
   </dialog>
@@ -62,8 +138,10 @@
         Paste a storage account connection string, with its account key. It is kept in memory only,
         never shown again, and forgotten when the explorer restarts.
       </p>
-      <label for="connection-string">Connection string</label>
-      <input id="connection-string" type="password" autocomplete="off" spellcheck="false" required>
+      <div class="field">
+        <label for="connection-string">Connection string</label>
+        <input id="connection-string" type="password" autocomplete="off" spellcheck="false" required>
+      </div>
       <label class="inline"><input id="connection-show" type="checkbox"> Show</label>
       <div id="connection-writes">
         <label class="inline"><input id="connection-allow-writes" type="checkbox"> Allow changes on this account, at my own risk</label>
@@ -73,7 +151,7 @@
       <menu>
         <button id="connection-reset" type="button" hidden>Use the AppHost connection</button>
         <button id="connection-cancel" type="button">Cancel</button>
-        <button id="connection-submit" type="submit">Connect</button>
+        <button id="connection-submit" type="submit" class="primary">Connect</button>
       </menu>
     </form>
   </dialog>

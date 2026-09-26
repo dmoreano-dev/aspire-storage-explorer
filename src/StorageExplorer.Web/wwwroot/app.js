@@ -4,22 +4,43 @@ const REQUEST_HEADERS = { 'X-Storage-Explorer': '1' };
 const JSON_HEADERS = { ...REQUEST_HEADERS, 'Content-Type': 'application/json' };
 
 const els = {
+  app: document.querySelector('.app'),
+  riskBanner: document.getElementById('risk-banner'),
   containers: document.getElementById('containers'),
   containerFilter: document.getElementById('container-filter'),
+  containerFilterField: document.getElementById('container-filter-field'),
+  containerCount: document.getElementById('container-count'),
   breadcrumb: document.getElementById('breadcrumb'),
+  title: document.getElementById('title'),
   message: document.getElementById('message'),
   toolbar: document.getElementById('toolbar'),
   filter: document.getElementById('filter'),
   filterCount: document.getElementById('filter-count'),
-  table: document.getElementById('entries'),
+  scopeButtons: document.querySelectorAll('.scope button'),
+  listing: document.getElementById('listing'),
   sortHeaders: document.querySelectorAll('#entries th[data-sort]'),
   tbody: document.querySelector('#entries tbody'),
   status: document.getElementById('status'),
-  refresh: document.getElementById('refresh'),
-  dialog: document.getElementById('confirm-dialog'),
-  dialogText: document.getElementById('confirm-text'),
-  connection: document.getElementById('connection'),
+  statusSource: document.getElementById('status-source'),
+  statusEndpoint: document.getElementById('status-endpoint'),
+  statusPath: document.getElementById('status-path'),
   access: document.getElementById('access'),
+  itemCount: document.getElementById('item-count'),
+  refresh: document.getElementById('refresh'),
+  theme: document.getElementById('theme'),
+  confirmDialog: document.getElementById('confirm-dialog'),
+  confirmText: document.getElementById('confirm-text'),
+  confirmAccount: document.getElementById('confirm-account'),
+  confirmContainer: document.getElementById('confirm-container'),
+  confirmBlob: document.getElementById('confirm-blob'),
+  confirmSize: document.getElementById('confirm-size'),
+  confirmNameField: document.getElementById('confirm-name-field'),
+  confirmNameHint: document.getElementById('confirm-name-hint'),
+  confirmName: document.getElementById('confirm-name'),
+  confirmCancel: document.getElementById('confirm-cancel'),
+  confirmSubmit: document.getElementById('confirm-submit'),
+  connectionAccount: document.getElementById('connection-account'),
+  connectionKind: document.getElementById('connection-kind'),
   changeConnection: document.getElementById('change-connection'),
   connectionDialog: document.getElementById('connection-dialog'),
   connectionForm: document.getElementById('connection-form'),
@@ -41,11 +62,15 @@ let statusTimer;
 // The folder on screen, kept so that sorting and clearing the search do not need another request.
 let listed = null;
 let listedLocation = null;
-// What the search box found in that folder and below it, or null while the box is empty.
+// What the search box found, or null while the box is empty.
 let found = null;
 let searchToken = 0;
 let searchTimer;
+// 'folder' searches the folder on screen and everything below it, 'container' the whole container.
+let searchScope = 'folder';
 let sort = { key: 'name', direction: 1 };
+// What must be typed to confirm a delete on an account that is not on this machine, or '' when nothing is asked.
+let requiredName = '';
 
 // Wait for a pause in typing before searching, since every search reads the listing from the account.
 const SEARCH_DELAY_MS = 250;
@@ -57,6 +82,43 @@ const sortValues = {
   type: (entry) => entry.contentType,
   modified: (entry) => (entry.lastModified ? Date.parse(entry.lastModified) : null),
 };
+
+// --- Icons -------------------------------------------------------------------
+// Static markup only: nothing that comes from the account is ever put in it.
+
+const ICONS = {
+  container: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>',
+  download: '<path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/>',
+  trash: '<path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
+  'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+  'chevron-right': '<path d="m9 6 6 6-6 6"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  unlock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/>',
+  alert: '<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4"/><path d="M12 17.5v.01"/>',
+  layers: '<path d="M12 3 3 8l9 5 9-5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+  table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+};
+
+function icon(name) {
+  const template = document.createElement('template');
+  template.innerHTML =
+    '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+    `stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+  return template.content.firstElementChild;
+}
+
+// The page marks where an icon goes with <i data-icon="name">; the element is replaced and keeps its classes.
+for (const placeholder of document.querySelectorAll('[data-icon]')) {
+  const svg = icon(placeholder.dataset.icon);
+  svg.classList.add(...placeholder.classList);
+  placeholder.replaceWith(svg);
+}
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -94,9 +156,47 @@ function formatSize(bytes) {
   return `${value.toFixed(1)} ${units[unit]}`;
 }
 
+const timeFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+const dayFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+const dayYearFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
+// "Today, 9:14 AM", "Sep 24, 4:02 PM" or "Sep 24, 2025". The full date and time go in the tooltip.
 function formatDate(value) {
-  return value ? new Date(value).toLocaleString() : '';
+  if (!value) return '';
+
+  const date = new Date(value);
+  const now = new Date();
+  const startOfDay = (day) => new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+  const days = Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000);
+
+  if (days === 0) return `Today, ${timeFormat.format(date)}`;
+  if (days === 1) return `Yesterday, ${timeFormat.format(date)}`;
+  if (date.getFullYear() === now.getFullYear()) return `${dayFormat.format(date)}, ${timeFormat.format(date)}`;
+  return dayYearFormat.format(date);
 }
+
+const TILE_BY_EXTENSION = {
+  csv: 'sheet', tsv: 'sheet', xls: 'sheet', xlsx: 'sheet',
+  pdf: 'doc',
+  json: 'data', xml: 'data', yaml: 'data', yml: 'data',
+  png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', svg: 'image', bmp: 'image', ico: 'image',
+  md: 'text', markdown: 'text',
+};
+
+// The tile in front of a name: the extension on a color that tells the kind of file at a glance.
+function renderTile(entry) {
+  if (entry.isFolder) {
+    const tile = el('span', 'tile tile-folder');
+    tile.append(icon('folder'));
+    return tile;
+  }
+
+  const match = /\.([A-Za-z0-9]{1,5})$/.exec(entry.name);
+  const extension = match ? match[1].toLowerCase() : '';
+  return el('span', `tile tile-${TILE_BY_EXTENSION[extension] ?? 'plain'}`, extension ? extension.toUpperCase() : 'FILE');
+}
+
+const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
 function showMessage(text, isError = false) {
   els.message.hidden = !text;
@@ -163,7 +263,9 @@ function renderContainers(active) {
   const matching = matchingContainers();
   const items = matching.map((container) => {
     const item = el('li');
-    const anchor = link(hashFor(container.name), container.name);
+    const anchor = link(hashFor(container.name));
+    anchor.title = container.name;
+    anchor.append(icon('container'), el('span', undefined, container.name));
     if (container.name === active) anchor.setAttribute('aria-current', 'page');
     item.append(anchor);
     return item;
@@ -171,33 +273,47 @@ function renderContainers(active) {
 
   if (containers.length > 0 && matching.length === 0) items.push(el('li', 'empty', 'No containers match.'));
 
-  els.containerFilter.hidden = containers.length === 0;
+  els.containerFilterField.hidden = containers.length === 0;
+  els.containerCount.textContent = containers.length > 0 ? String(containers.length) : '';
   els.containers.replaceChildren(...items);
 }
 
-function renderBreadcrumb(container, prefix) {
-  const parts = [link('#/', 'Containers')];
+// The last segment of the path is the title; the ones before it are the breadcrumb.
+function renderLocation(container, prefix) {
+  const segments = prefix.split('/').filter(Boolean);
+  const crumbs = [];
+  let title = 'Containers';
 
   if (container) {
-    parts.push(link(hashFor(container), container));
+    crumbs.push(link('#/', 'Containers'));
 
-    let accumulated = '';
-    for (const segment of prefix.split('/').filter(Boolean)) {
-      accumulated += `${segment}/`;
-      parts.push(link(hashFor(container, accumulated), segment));
+    if (segments.length === 0) {
+      title = container;
+    } else {
+      crumbs.push(link(hashFor(container), container));
+
+      let accumulated = '';
+      segments.forEach((segment, index) => {
+        accumulated += `${segment}/`;
+        if (index < segments.length - 1) crumbs.push(link(hashFor(container, accumulated), segment));
+      });
+      title = segments[segments.length - 1];
     }
   }
 
   els.breadcrumb.replaceChildren(
-    ...parts.flatMap((part, index) => (index === 0 ? [part] : [el('span', 'sep', '/'), part])),
+    ...crumbs.flatMap((crumb, index) => (index === 0 ? [crumb] : [icon('chevron-right'), crumb])),
   );
+  els.title.textContent = title;
+  els.statusPath.textContent = container ? [container, ...segments].join('/') : '';
 }
 
 function hideListing() {
   listed = null;
   found = null;
-  els.table.hidden = true;
+  els.listing.hidden = true;
   els.toolbar.hidden = true;
+  els.itemCount.textContent = '';
 }
 
 // Folders stay on top whatever the column and the direction. They have no size, type or date, so they go by name.
@@ -227,7 +343,7 @@ function renderSortHeaders() {
     } else {
       header.removeAttribute('aria-sort');
     }
-    header.querySelector('.arrow').textContent = active ? (sort.direction === 1 ? '▲' : '▼') : '';
+    header.querySelector('.arrow').textContent = active ? (sort.direction === 1 ? '↑' : '↓') : '';
   }
 }
 
@@ -238,26 +354,34 @@ function sortBy(key) {
 
 const currentTerm = () => els.filter.value.trim();
 
-// Shows the folder, or what the search box found in it and below it.
+function renderScope() {
+  for (const button of els.scopeButtons) {
+    button.setAttribute('aria-pressed', String(button.dataset.scope === searchScope));
+  }
+}
+
+// Shows the folder, or what the search box found.
 function renderEntries() {
   if (!listed) return;
 
-  const { container, listing: folder } = listed;
+  const { container, prefix, listing: folder } = listed;
   const listing = found ? found.listing : folder;
   const entries = [...listing.entries].sort(compareEntries);
 
   els.tbody.replaceChildren(...entries.map((entry) => renderRow(container, entry)));
   renderSortHeaders();
 
-  els.table.hidden = entries.length === 0;
+  els.listing.hidden = entries.length === 0;
   els.toolbar.hidden = folder.entries.length === 0;
   els.filterCount.textContent = found ? `${entries.length} found` : '';
+  els.itemCount.textContent = found ? `${entries.length} found` : plural(entries.length, 'item');
 
   if (folder.entries.length === 0) {
-    showMessage('This folder is empty.');
+    showMessage(prefix ? 'This folder is empty.' : 'This container is empty.');
   } else if (found) {
     const limit = listing.truncated ? 'The search stopped at its limit, so there may be more matches.' : '';
-    showMessage(entries.length === 0 ? `No blobs match "${found.term}" in this folder or below. ${limit}`.trim() : limit);
+    const where = found.scope === 'container' ? 'this container' : 'this folder or below';
+    showMessage(entries.length === 0 ? `No blobs match "${found.term}" in ${where}. ${limit}`.trim() : limit);
   } else if (listing.truncated) {
     showMessage(`Listing truncated: showing the first ${entries.length} entries.`);
   } else {
@@ -265,7 +389,7 @@ function renderEntries() {
   }
 }
 
-// Looks for the text of the search box in the folder on screen and in every folder below it.
+// Looks for the text of the search box in the folder on screen and below it, or in the whole container.
 async function search() {
   if (!listed) return;
 
@@ -278,12 +402,14 @@ async function search() {
   }
 
   const { container, prefix } = listed;
+  const scope = searchScope;
   els.filterCount.textContent = 'Searching…';
   try {
+    const searchPrefix = scope === 'container' ? '' : prefix;
     const listing = await getJson(
-      `${containerUrl(container)}/search?prefix=${encodeURIComponent(prefix)}&q=${encodeURIComponent(term)}`);
+      `${containerUrl(container)}/search?prefix=${encodeURIComponent(searchPrefix)}&q=${encodeURIComponent(term)}`);
     if (token !== searchToken) return;
-    found = { term, listing };
+    found = { term, scope, listing };
     renderEntries();
   } catch (error) {
     if (token !== searchToken) return;
@@ -296,40 +422,51 @@ async function search() {
 function renderRow(container, entry) {
   const row = el('tr');
 
-  const name = el('td', 'name');
-  name.append(el('span', 'icon', entry.isFolder ? '📁' : '📄'));
+  const name = el('td');
+  const cell = el('div', 'name-cell');
+  const text = el('span', 'name-text');
   if (entry.isFolder) {
-    name.append(link(hashFor(container, entry.path), entry.name));
+    text.append(link(hashFor(container, entry.path), entry.name, 'folder'));
   } else {
     // A search result is named by its path below the folder searched: the folder part links to where the blob is.
     const slash = entry.name.lastIndexOf('/');
     if (slash !== -1) {
       const folder = entry.path.slice(0, entry.path.length - entry.name.length + slash + 1);
-      name.append(link(hashFor(container, folder), entry.name.slice(0, slash + 1)));
+      text.append(link(hashFor(container, folder), entry.name.slice(0, slash + 1), 'path'));
     }
-    name.append(el('span', undefined, entry.name.slice(slash + 1)));
+    text.append(entry.name.slice(slash + 1));
   }
+  cell.append(renderTile(entry), text);
+  name.append(cell);
 
-  const actions = el('td', 'actions');
+  const type = el('td', 'type', entry.isFolder ? 'Folder' : entry.contentType ?? '');
+  const size = el('td', entry.isFolder ? 'num none' : 'num', entry.isFolder ? '—' : formatSize(entry.size));
+  const modified = el('td', entry.isFolder ? 'modified none' : 'modified', entry.isFolder ? '—' : formatDate(entry.lastModified));
+  if (entry.lastModified) modified.title = new Date(entry.lastModified).toLocaleString();
+
+  const actions = el('td');
+  const group = el('div', 'row-actions');
   if (!entry.isFolder) {
-    actions.append(link(blobUrl(container, entry.path), 'Download', 'button'));
+    const download = link(blobUrl(container, entry.path), undefined, 'icon-button outlined');
+    download.title = 'Download';
+    download.setAttribute('aria-label', `Download ${entry.name}`);
+    download.append(icon('download'));
+    group.append(download);
 
     // Hiding the button is only a courtesy: the server refuses the delete on a read-only connection anyway.
     if (connection && !connection.readOnly) {
-      const deleteButton = el('button', 'danger', 'Delete');
+      const deleteButton = el('button', 'icon-button danger');
       deleteButton.type = 'button';
+      deleteButton.title = 'Delete';
+      deleteButton.setAttribute('aria-label', `Delete ${entry.name}`);
+      deleteButton.append(icon('trash'));
       deleteButton.addEventListener('click', () => deleteBlob(container, entry));
-      actions.append(deleteButton);
+      group.append(deleteButton);
     }
   }
+  actions.append(group);
 
-  row.append(
-    name,
-    el('td', 'num', formatSize(entry.size)),
-    el('td', undefined, entry.isFolder ? 'Folder' : entry.contentType ?? ''),
-    el('td', undefined, formatDate(entry.lastModified)),
-    actions,
-  );
+  row.append(name, type, size, modified, actions);
   return row;
 }
 
@@ -342,7 +479,7 @@ async function render() {
   clearTimeout(searchTimer);
 
   renderContainers(container);
-  renderBreadcrumb(container, prefix);
+  renderLocation(container, prefix);
 
   // A search applies to the folder it was typed in.
   const locationKey = `${container}/${prefix}`;
@@ -373,24 +510,41 @@ async function render() {
   }
 }
 
+// The state of the connection is told in one place, the status bar, and by color everywhere else:
+// green for a local account, blue for a remote one that is read-only, red for a remote one that can be changed.
 function renderConnection() {
-  els.connection.textContent = connection
-    ? `${connection.accountName} · ${connection.endpoint}${connection.isCustom ? ' · custom' : ''}`
-    : '';
-
-  // Nothing to say for a local connection you can change: that is the normal case.
   const readOnly = connection?.readOnly ?? false;
   const risky = connection != null && !readOnly && !connection.isLocal;
+  const tone = connection == null ? 'unknown' : risky ? 'danger' : connection.isLocal ? 'ok' : 'info';
 
-  els.access.hidden = !readOnly && !risky;
-  els.access.className = risky ? 'badge risk' : 'badge';
-  els.access.textContent = readOnly ? '🔒 Read-only' : '🔓 Writable · own risk';
-  if (readOnly) {
-    els.access.title = connection.readOnlyLocked
-      ? 'readOnly is set in WithStorageExplorer.'
-      : 'This account is not on this machine. Use Change connection and allow changes to delete.';
-  } else {
-    els.access.title = 'This account is not on this machine and changes are allowed.';
+  els.app.dataset.tone = tone;
+  els.riskBanner.hidden = !risky;
+
+  els.connectionAccount.textContent = connection ? connection.accountName : 'Connection';
+  els.connectionKind.textContent = connection ? (risky ? 'Writable · own risk' : connection.isLocal ? 'Local' : 'Remote') : '';
+  els.changeConnection.title = connection
+    ? `${connection.endpoint}${connection.isCustom ? ' (custom connection)' : ''}. Change connection`
+    : 'Change connection';
+
+  els.statusSource.textContent = connection?.isCustom ? 'Custom connection, kept in memory' : 'AppHost connection';
+  els.statusEndpoint.textContent = connection?.endpoint ?? '';
+
+  els.access.hidden = connection == null;
+  if (connection) {
+    els.access.className = risky ? 'access danger' : readOnly ? 'access' : 'access ok';
+    els.access.replaceChildren(
+      icon(readOnly ? 'lock' : 'unlock'),
+      el('span', undefined, readOnly ? 'Read-only' : connection.isLocal ? 'Read & write' : 'Writable · own risk'),
+    );
+    if (readOnly) {
+      els.access.title = connection.readOnlyLocked
+        ? 'readOnly is set in WithStorageExplorer.'
+        : 'This account is not on this machine. Use Change connection and allow changes to delete.';
+    } else {
+      els.access.title = connection.isLocal
+        ? 'Deleting is enabled.'
+        : 'This account is not on this machine and changes are allowed.';
+    }
   }
 }
 
@@ -414,19 +568,38 @@ async function loadContainers() {
 
 // --- Actions -------------------------------------------------------------------
 
-function confirmDialog(text) {
-  els.dialogText.textContent = text;
-  els.dialog.returnValue = '';
+// Asks before a delete. On an account that is not on this machine the name of the blob must be typed as well.
+function confirmDelete(container, entry) {
+  const remote = connection != null && !connection.isLocal;
+  const fileName = entry.path.slice(entry.path.lastIndexOf('/') + 1);
+
+  els.confirmText.textContent = remote
+    ? 'It will be removed from an account that is not on this machine. This cannot be undone.'
+    : 'It will be removed from the account below. This cannot be undone.';
+
+  const account = el('span', undefined, connection?.accountName ?? '');
+  els.confirmAccount.replaceChildren(...(remote ? [account, el('span', 'tag', 'Remote')] : [account]));
+  els.confirmContainer.textContent = container;
+  els.confirmBlob.textContent = entry.path;
+  els.confirmSize.textContent = formatSize(entry.size);
+
+  requiredName = remote ? fileName : '';
+  els.confirmNameField.hidden = !remote;
+  els.confirmNameHint.textContent = fileName;
+  els.confirmName.value = '';
+  els.confirmSubmit.disabled = remote;
+
+  els.confirmDialog.returnValue = '';
 
   return new Promise((resolve) => {
-    els.dialog.addEventListener('close', () => resolve(els.dialog.returnValue === 'confirm'), { once: true });
-    els.dialog.showModal();
+    els.confirmDialog.addEventListener('close', () => resolve(els.confirmDialog.returnValue === 'confirm'), { once: true });
+    els.confirmDialog.showModal();
+    (remote ? els.confirmName : els.confirmCancel).focus();
   });
 }
 
 async function deleteBlob(container, entry) {
-  const account = connection ? ` in account "${connection.accountName}"` : '';
-  const confirmed = await confirmDialog(`Delete "${entry.path}" from "${container}"${account}? This cannot be undone.`);
+  const confirmed = await confirmDelete(container, entry);
   if (!confirmed) return;
 
   try {
@@ -442,6 +615,11 @@ async function refresh() {
   await Promise.all([loadConnection(), loadContainers()]);
   await render();
 }
+
+els.confirmCancel.addEventListener('click', () => els.confirmDialog.close('cancel'));
+els.confirmName.addEventListener('input', () => {
+  els.confirmSubmit.disabled = els.confirmName.value !== requiredName;
+});
 
 // --- Connection dialog ---------------------------------------------------------
 
@@ -515,6 +693,50 @@ els.connectionForm.addEventListener('submit', (event) => {
 });
 els.connectionReset.addEventListener('click', () => sendConnection({ method: 'DELETE', headers: REQUEST_HEADERS }));
 
+// --- Theme ---------------------------------------------------------------------
+
+// System follows the theme of the operating system; Light and Dark override it. index.html applies the saved one
+// before the first paint, by setting data-theme on <html>; this is where it is changed.
+const THEMES = ['system', 'light', 'dark'];
+const THEME_LABELS = { system: 'System', light: 'Light', dark: 'Dark' };
+const THEME_ICONS = { system: 'monitor', light: 'sun', dark: 'moon' };
+const THEME_COOKIE = 'storage-explorer-theme';
+
+let theme = THEMES.includes(document.documentElement.dataset.theme) ? document.documentElement.dataset.theme : 'system';
+
+const nextTheme = () => THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+
+function renderTheme() {
+  if (theme === 'system') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = theme;
+
+  const label = `Theme: ${THEME_LABELS[theme]}. Click for ${THEME_LABELS[nextTheme()]}`;
+  els.theme.replaceChildren(icon(THEME_ICONS[theme]));
+  els.theme.title = label;
+  els.theme.setAttribute('aria-label', label);
+}
+
+// A cookie and not localStorage: Aspire gives the explorer a different port on each run, and localStorage is kept per
+// port, while a cookie is shared by every port of localhost, so the choice survives a restart. It holds nothing else.
+function saveTheme() {
+  // "System" is no choice at all, so it removes the cookie.
+  const cookie = theme === 'system' ? `${THEME_COOKIE}=; max-age=0` : `${THEME_COOKIE}=${theme}; max-age=31536000`;
+  try {
+    document.cookie = `${cookie}; path=/; SameSite=Lax`;
+  } catch {
+    // Cookies are blocked: the choice lasts until the page is reloaded.
+  }
+}
+
+els.theme.addEventListener('click', () => {
+  theme = nextTheme();
+  renderTheme();
+  saveTheme();
+  setStatus(`Theme: ${THEME_LABELS[theme]}`);
+});
+
+// --- Search, sort and keyboard -------------------------------------------------
+
 els.containerFilter.addEventListener('input', () => renderContainers(parseLocation().container));
 els.containerFilter.addEventListener('keydown', (event) => {
   // Enter opens the first container that matches.
@@ -522,14 +744,34 @@ els.containerFilter.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && containerTerm() && first) location.hash = hashFor(first.name);
 });
 
+// "/" jumps to the container search, as it does in most tools with a list on the side.
+document.addEventListener('keydown', (event) => {
+  if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return;
+  if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable]')) return;
+  if (document.querySelector('dialog[open]') || els.containerFilterField.hidden) return;
+
+  event.preventDefault();
+  els.containerFilter.focus();
+});
+
 els.filter.addEventListener('input', () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(search, currentTerm() ? SEARCH_DELAY_MS : 0);
 });
+for (const button of els.scopeButtons) {
+  button.addEventListener('click', () => {
+    if (searchScope === button.dataset.scope) return;
+    searchScope = button.dataset.scope;
+    renderScope();
+    if (currentTerm()) search();
+  });
+}
 for (const header of els.sortHeaders) {
   header.querySelector('button').addEventListener('click', () => sortBy(header.dataset.sort));
 }
 
 els.refresh.addEventListener('click', refresh);
 window.addEventListener('hashchange', render);
+renderScope();
+renderTheme();
 refresh();
