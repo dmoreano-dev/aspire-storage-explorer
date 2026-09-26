@@ -5,7 +5,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
 
     <PackageId>StorageExplorer.Aspire.Hosting</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Description>Aspire hosting integration that adds a web-based Azure Storage blob explorer to the AppHost.</Description>
     <PackageTags>aspire integration hosting azure storage blob explorer azurite</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -22,7 +22,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="13.5.4" />
+    <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="13.1.0" />
   </ItemGroup>
 
   <ItemGroup>

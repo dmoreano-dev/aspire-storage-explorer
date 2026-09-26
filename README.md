@@ -6,7 +6,7 @@ It is meant for local development with the Azurite emulator, so you don't need a
 **Features (v0.1):** list containers, navigate folders with a breadcrumb, list blobs (name, size, content type, last
 modified), download a blob, and delete a blob after a confirmation that names the account.
 
-**Requirements:** .NET 10, Aspire 13 and Docker (the explorer runs as a container next to the emulator).
+**Requirements:** .NET 10, Aspire 13.1 or later and Docker (the explorer runs as a container next to the emulator).
 
 ## Usage
 
