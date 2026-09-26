@@ -18,4 +18,8 @@ internal sealed record EntryListing(IReadOnlyList<ExplorerEntry> Entries, bool T
 internal sealed record BlobDownload(Stream Content, string ContentType, string FileName);
 
 /// <param name="ConnectionString">A storage account connection string, with the account key.</param>
-internal sealed record SetConnectionRequest(string? ConnectionString);
+/// <param name="AllowWrites">
+/// Lets the explorer change data on a remote account, which is read-only otherwise. It has no effect on a local
+/// connection, or when the AppHost locked the explorer with <c>readOnly: true</c>.
+/// </param>
+internal sealed record SetConnectionRequest(string? ConnectionString, bool AllowWrites = false);

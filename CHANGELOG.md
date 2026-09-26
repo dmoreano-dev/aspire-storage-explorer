@@ -4,6 +4,28 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 versions follow [SemVer](https://semver.org/). The release workflow publishes the section that matches the tag, so set
 the date when you tag.
 
+## [Unreleased]
+
+## [0.2.0] - 2026-09-26
+
+### Added
+
+- `WithStorageExplorer(readOnly: true)` locks the explorer to reading: deleting answers `403` and the page hides Delete
+  and cannot lift it. Download and browsing still work.
+- **Allow changes on this account, at my own risk** in **Change connection**, for an account that is not on your
+  machine. The page shows a **Read-only** or **Writable · own risk** badge next to the account.
+
+### Changed
+
+- An account that is not on your machine (anything but `localhost`, `127.0.0.1`, `[::1]`, `host.docker.internal` or a
+  container name) is read-only by default. Before, deleting worked on whatever account you connected. To delete on a
+  remote account, pass `readOnly: false` (for the connection from the AppHost) or tick **Allow changes** when you connect
+  to it from the page. The emulator is not affected.
+- `WithStorageExplorer` has a new optional parameter, `readOnly`, after `containerName`. It is source compatible, but a
+  project compiled against 0.1.x must be rebuilt.
+- `GET /api/connection` also returns `isLocal`, `readOnly` and `readOnlyLocked`, and `PUT /api/connection` accepts
+  `allowWrites`.
+
 ## [0.1.2] - 2026-09-26
 
 ### Fixed

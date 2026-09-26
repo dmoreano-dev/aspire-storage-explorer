@@ -55,6 +55,15 @@ button.danger { color: var(--danger); }
 .topbar h1 { margin: 0; font-size: 18px; }
 .connection { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .status { flex: 1; color: var(--muted); }
+.badge {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.badge.risk { color: var(--danger); border-color: var(--danger); }
 
 .layout { display: flex; min-height: calc(100vh - 57px); }
 

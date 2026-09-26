@@ -14,11 +14,14 @@ const els = {
   dialog: document.getElementById('confirm-dialog'),
   dialogText: document.getElementById('confirm-text'),
   connection: document.getElementById('connection'),
+  access: document.getElementById('access'),
   changeConnection: document.getElementById('change-connection'),
   connectionDialog: document.getElementById('connection-dialog'),
   connectionForm: document.getElementById('connection-form'),
   connectionString: document.getElementById('connection-string'),
   connectionShow: document.getElementById('connection-show'),
+  connectionWrites: document.getElementById('connection-writes'),
+  connectionAllowWrites: document.getElementById('connection-allow-writes'),
   connectionError: document.getElementById('connection-error'),
   connectionReset: document.getElementById('connection-reset'),
   connectionCancel: document.getElementById('connection-cancel'),
@@ -182,10 +185,13 @@ function renderRow(container, entry) {
   if (!entry.isFolder) {
     actions.append(link(blobUrl(container, entry.path), 'Download', 'button'));
 
-    const deleteButton = el('button', 'danger', 'Delete');
-    deleteButton.type = 'button';
-    deleteButton.addEventListener('click', () => deleteBlob(container, entry));
-    actions.append(deleteButton);
+    // Hiding the button is only a courtesy: the server refuses the delete on a read-only connection anyway.
+    if (connection && !connection.readOnly) {
+      const deleteButton = el('button', 'danger', 'Delete');
+      deleteButton.type = 'button';
+      deleteButton.addEventListener('click', () => deleteBlob(container, entry));
+      actions.append(deleteButton);
+    }
   }
 
   row.append(
@@ -225,6 +231,21 @@ function renderConnection() {
   els.connection.textContent = connection
     ? `${connection.accountName} · ${connection.endpoint}${connection.isCustom ? ' · custom' : ''}`
     : '';
+
+  // Nothing to say for a local connection you can change: that is the normal case.
+  const readOnly = connection?.readOnly ?? false;
+  const risky = connection != null && !readOnly && !connection.isLocal;
+
+  els.access.hidden = !readOnly && !risky;
+  els.access.className = risky ? 'badge risk' : 'badge';
+  els.access.textContent = readOnly ? '🔒 Read-only' : '🔓 Writable · own risk';
+  if (readOnly) {
+    els.access.title = connection.readOnlyLocked
+      ? 'readOnly is set in WithStorageExplorer.'
+      : 'This account is not on this machine. Use Change connection and allow changes to delete.';
+  } else {
+    els.access.title = 'This account is not on this machine and changes are allowed.';
+  }
 }
 
 async function loadConnection() {
@@ -293,6 +314,8 @@ function openConnectionDialog() {
   showConnectionError('');
   els.connectionShow.checked = false;
   els.connectionString.type = 'password';
+  els.connectionAllowWrites.checked = false;
+  els.connectionWrites.hidden = connection?.readOnlyLocked ?? false;
   els.connectionReset.hidden = !connection?.isCustom;
   els.connectionDialog.showModal();
   els.connectionString.focus();
@@ -325,17 +348,22 @@ els.connectionCancel.addEventListener('click', () => els.connectionDialog.close(
 els.connectionShow.addEventListener('change', () => {
   els.connectionString.type = els.connectionShow.checked ? 'text' : 'password';
 });
-// The secret must not linger in the page once the dialog closes, however it closes.
+// The secret must not linger in the page once the dialog closes, however it closes, and neither must the consent to
+// write: it is asked again for every connection.
 els.connectionDialog.addEventListener('close', () => {
   els.connectionString.value = '';
   els.connectionString.type = 'password';
+  els.connectionAllowWrites.checked = false;
 });
 els.connectionForm.addEventListener('submit', (event) => {
   event.preventDefault();
   sendConnection({
     method: 'PUT',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ connectionString: els.connectionString.value }),
+    body: JSON.stringify({
+      connectionString: els.connectionString.value,
+      allowWrites: els.connectionAllowWrites.checked,
+    }),
   });
 });
 els.connectionReset.addEventListener('click', () => sendConnection({ method: 'DELETE', headers: REQUEST_HEADERS }));

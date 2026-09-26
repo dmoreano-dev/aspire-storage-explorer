@@ -8,5 +8,5 @@ internal static class StorageExplorerContainerImageTags
     // or can be overridden through the configureContainer callback.
     public static readonly string? Registry = "ghcr.io";
     public const string Image = "dmoreano-dev/storage-explorer";
-    public const string Tag = "0.1.2";
+    public const string Tag = "0.2.0";
 }

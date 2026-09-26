@@ -4,7 +4,8 @@ An [Aspire](https://aspire.dev) hosting integration that adds a small web UI to 
 It is meant for local development with the Azurite emulator, so you don't need a separate storage explorer.
 
 **Features (v0.1):** list containers, navigate folders with a breadcrumb, list blobs (name, size, content type, last
-modified), download a blob, and delete a blob after a confirmation that names the account.
+modified), download a blob, and delete a blob after a confirmation that names the account. Deleting is only enabled for
+local endpoints unless you say otherwise (see [Read-only](#read-only)).
 
 **Requirements:** .NET 10, Aspire 13.1 or later and Docker (the explorer runs as a container next to the emulator).
 Keep every `Aspire.*` package of your AppHost at the same version as its SDK (`Aspire.AppHost.Sdk`): mixing versions
@@ -57,6 +58,28 @@ may need `--add-host=host.docker.internal:host-gateway`, not tested). A `<name>.
 names a container for the others, is used as `<name>`: Azurite reads a host with a dot as `<account>.blob...` and
 rejects it with an empty 400. Connection strings for a real Azure account are left untouched.
 
+### Read-only
+
+Deleting is on for the emulator and any other local endpoint (`localhost`, `127.0.0.1`, `[::1]`, `host.docker.internal`,
+or a container name), and off for any other account, so pasting the connection string of a real account cannot delete
+anything by accident. Download and browsing always work.
+
+```csharp
+storage.WithStorageExplorer(readOnly: true);   // never deletes, on any account
+storage.WithStorageExplorer(readOnly: false);  // the AppHost connection can delete even when it is not local
+```
+
+| `readOnly` | Connection from the AppHost | Connection typed in the page |
+| --- | --- | --- |
+| `true` | read-only | read-only, and the page cannot lift it |
+| not set | local: can delete. Remote: read-only | local: can delete. Remote: read-only, unless you tick **Allow changes on this account, at my own risk** |
+| `false` | can delete | same as not set |
+
+The page shows a **Read-only** badge, or **Writable · own risk** for a remote account you allowed changes on, and hides
+Delete when it is read-only. The server enforces it too: a delete answers `403` whatever the page does. The choice to
+allow changes is not saved: it is asked again for every connection and lost when the explorer restarts. A host that is
+not recognized as local counts as remote.
+
 ## Try the sample
 
 ```bash
@@ -84,6 +107,8 @@ first; it gets the same tag the extension uses, so the sample runs it:
   environment variable if you need another host name). CORS is not enabled.
 - Deleting a blob or changing the connection requires a custom `X-Storage-Explorer` header plus a same-origin `Origin`,
   so other websites cannot do it through your browser.
+- Accounts that are not on your machine are read-only by default, and `readOnly: true` turns deleting off for good (see
+  [Read-only](#read-only)).
 - A connection set from the page lives in memory only: it is lost on restart, never sent back to the browser, and not
   logged. The page shows the account name and endpoint, not the key.
 
@@ -93,8 +118,7 @@ first; it gets the same tag the extension uses, so the sample runs it:
 - Keep the storage resource on `RunAsEmulator()`. Without it Aspire provisions Azure resources and the explorer waits
   for them.
 - Only account connection strings with a key work; Entra ID is not supported yet.
-- There is no read-only mode: deleting works on whatever account you connect. Only single blobs can be deleted, not
-  folders.
+- Only single blobs can be deleted, not folders.
 
 ## Repository layout
 
@@ -104,8 +128,6 @@ first; it gets the same tag the extension uses, so the sample runs it:
 | `src/StorageExplorer.Aspire.Hosting` | The Aspire extension, packed as the NuGet package `StorageExplorer.Aspire.Hosting` |
 | `samples/Sample.AppHost` | Aspire app that uses the extension |
 | `samples/Sample.Seeder` | Fills the emulator with sample blobs |
-
-See [docs/backlog.md](docs/backlog.md) for what is planned.
 
 ## License
 

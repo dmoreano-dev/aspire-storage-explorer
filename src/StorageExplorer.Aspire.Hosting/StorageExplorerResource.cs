@@ -9,4 +9,7 @@ public sealed class StorageExplorerResource(string name) : ContainerResource(nam
 
     /// <summary>Configuration key (as an environment variable) the web app reads its connection string from.</summary>
     internal const string ConnectionStringVariable = "StorageExplorer__ConnectionString";
+
+    /// <summary>Configuration key (as an environment variable) the web app reads its read-only setting from.</summary>
+    internal const string ReadOnlyVariable = "StorageExplorer__ReadOnly";
 }

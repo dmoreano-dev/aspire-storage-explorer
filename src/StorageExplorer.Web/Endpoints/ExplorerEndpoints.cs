@@ -29,7 +29,7 @@ internal static class ExplorerEndpoints
                 if (!BlobClientFactory.TryCreate(value, out var client))
                     return InvalidConnectionString();
 
-                await connection.UseAsync(client, cancellationToken);
+                await connection.UseAsync(client, request.AllowWrites, cancellationToken);
 
                 return Results.Ok(connection.Info);
             })
@@ -74,7 +74,8 @@ internal static class ExplorerEndpoints
             await explorer.DeleteAsync(container, path, cancellationToken)
                 ? Results.NoContent()
                 : Results.NotFound())
-            .AddEndpointFilter<RequireExplorerHeaderFilter>();
+            .AddEndpointFilter<RequireExplorerHeaderFilter>()
+            .AddEndpointFilter<RequireWritableFilter>();
 
         return app;
     }

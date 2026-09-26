@@ -10,6 +10,7 @@
   <header class="topbar">
     <h1>Storage Explorer</h1>
     <span id="connection" class="connection"></span>
+    <span id="access" class="badge" hidden></span>
     <span id="status" class="status" role="status"></span>
     <button id="change-connection" type="button">Change connection</button>
     <button id="refresh" type="button">Refresh</button>
@@ -59,6 +60,10 @@
       <label for="connection-string">Connection string</label>
       <input id="connection-string" type="password" autocomplete="off" spellcheck="false" required>
       <label class="inline"><input id="connection-show" type="checkbox"> Show</label>
+      <div id="connection-writes">
+        <label class="inline"><input id="connection-allow-writes" type="checkbox"> Allow changes on this account, at my own risk</label>
+        <p class="hint">An account that is not on this machine opens read-only unless you tick this.</p>
+      </div>
       <p id="connection-error" class="message error" role="alert" hidden></p>
       <menu>
         <button id="connection-reset" type="button" hidden>Use the AppHost connection</button>
