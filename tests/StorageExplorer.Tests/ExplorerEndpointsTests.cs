@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Azure;
+using StorageExplorer.Web.Blobs;
 
 namespace StorageExplorer.Web.Tests;
 
@@ -43,7 +44,7 @@ public class ExplorerEndpointsTests
         ];
 
         // Act
-        var response = await host.Client.GetAsync("/api/containers");
+        var response = await host.Client.GetAsync("/api/blobs/containers");
         var actual = await Json(response);
 
         // Assert
@@ -63,7 +64,7 @@ public class ExplorerEndpointsTests
             Truncated: true);
 
         // Act
-        var response = await host.Client.GetAsync("/api/containers/photos/entries?prefix=2025/");
+        var response = await host.Client.GetAsync("/api/blobs/containers/photos/entries?prefix=2025/");
         var actual = await Json(response);
 
         // Assert
@@ -82,7 +83,7 @@ public class ExplorerEndpointsTests
         using var host = new ApiHost();
 
         // Act
-        await host.Client.GetAsync("/api/containers/photos/entries");
+        await host.Client.GetAsync("/api/blobs/containers/photos/entries");
 
         // Assert
         Assert.Equal(["entries:photos:"], host.Explorer.Calls);
@@ -97,7 +98,7 @@ public class ExplorerEndpointsTests
         using var host = new ApiHost();
 
         // Act
-        var response = await host.Client.GetAsync("/api/containers/photos/search?prefix=2025/&q=%20report%20");
+        var response = await host.Client.GetAsync("/api/blobs/containers/photos/search?prefix=2025/&q=%20report%20");
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -114,7 +115,7 @@ public class ExplorerEndpointsTests
         using var host = new ApiHost();
 
         // Act
-        var response = await host.Client.GetAsync($"/api/containers/photos/search{query}");
+        var response = await host.Client.GetAsync($"/api/blobs/containers/photos/search{query}");
 
         // Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -132,7 +133,7 @@ public class ExplorerEndpointsTests
         host.Explorer.Download = new BlobDownload(new MemoryStream([1, 2, 3]), "text/csv", "report 2025.csv");
 
         // Act
-        var response = await host.Client.GetAsync("/api/containers/reports/blob?path=2025/report%202025.csv");
+        var response = await host.Client.GetAsync("/api/blobs/containers/reports/blob?path=2025/report%202025.csv");
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -151,7 +152,7 @@ public class ExplorerEndpointsTests
         host.Explorer.Download = null;
 
         // Act
-        var response = await host.Client.GetAsync("/api/containers/reports/blob?path=nope.csv");
+        var response = await host.Client.GetAsync("/api/blobs/containers/reports/blob?path=nope.csv");
 
         // Assert
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
@@ -164,7 +165,7 @@ public class ExplorerEndpointsTests
         using var host = new ApiHost();
 
         // Act
-        var response = await host.Client.GetAsync("/api/containers/reports/blob");
+        var response = await host.Client.GetAsync("/api/blobs/containers/reports/blob");
 
         // Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -178,7 +179,7 @@ public class ExplorerEndpointsTests
     {
         // Arrange
         using var host = new ApiHost();
-        var request = host.Request(HttpMethod.Delete, "/api/containers/photos/blob?path=2025/cat.png");
+        var request = host.Request(HttpMethod.Delete, "/api/blobs/containers/photos/blob?path=2025/cat.png");
 
         // Act
         var response = await host.Client.SendAsync(request);
@@ -194,7 +195,7 @@ public class ExplorerEndpointsTests
         // Arrange
         using var host = new ApiHost();
         host.Explorer.DeleteResult = false;
-        var request = host.Request(HttpMethod.Delete, "/api/containers/photos/blob?path=nope.png");
+        var request = host.Request(HttpMethod.Delete, "/api/blobs/containers/photos/blob?path=nope.png");
 
         // Act
         var response = await host.Client.SendAsync(request);
@@ -217,8 +218,8 @@ public class ExplorerEndpointsTests
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var (client, allowWrites) = Assert.Single(host.Connection.Used);
-        Assert.Equal("prodaccount", client.AccountName);
+        var (clients, allowWrites) = Assert.Single(host.Connection.Used);
+        Assert.Equal("prodaccount", clients.Blob.AccountName);
         Assert.False(allowWrites);
         Assert.Equal("devstoreaccount1", (await Json(response)).GetProperty("accountName").GetString());
     }
@@ -249,7 +250,7 @@ public class ExplorerEndpointsTests
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("prodaccount", Assert.Single(host.Connection.Used).Client.AccountName);
+        Assert.Equal("prodaccount", Assert.Single(host.Connection.Used).Clients.Blob.AccountName);
     }
 
     [Theory]
@@ -334,8 +335,8 @@ public class ExplorerEndpointsTests
         await host.Client.SendAsync(request);
 
         // Assert
-        var (client, _) = Assert.Single(host.Connection.Used);
-        Assert.Equal("host.docker.internal", client.Uri.Host);
+        var (clients, _) = Assert.Single(host.Connection.Used);
+        Assert.Equal("host.docker.internal", clients.Blob.Uri.Host);
     }
 
     [Fact]
@@ -349,8 +350,8 @@ public class ExplorerEndpointsTests
         await host.Client.SendAsync(request);
 
         // Assert
-        var (client, _) = Assert.Single(host.Connection.Used);
-        Assert.Equal("127.0.0.1", client.Uri.Host);
+        var (clients, _) = Assert.Single(host.Connection.Used);
+        Assert.Equal("127.0.0.1", clients.Blob.Uri.Host);
     }
 
     [Fact]
@@ -364,8 +365,8 @@ public class ExplorerEndpointsTests
         await host.Client.SendAsync(request);
 
         // Assert
-        var (client, _) = Assert.Single(host.Connection.Used);
-        Assert.Equal("storage", client.Uri.Host);
+        var (clients, _) = Assert.Single(host.Connection.Used);
+        Assert.Equal("storage", clients.Blob.Uri.Host);
     }
 
     [Fact]
@@ -379,8 +380,8 @@ public class ExplorerEndpointsTests
         await host.Client.SendAsync(request);
 
         // Assert
-        var (client, _) = Assert.Single(host.Connection.Used);
-        Assert.Equal("storage.dev.internal", client.Uri.Host);
+        var (clients, _) = Assert.Single(host.Connection.Used);
+        Assert.Equal("storage.dev.internal", clients.Blob.Uri.Host);
     }
 
     [Fact]

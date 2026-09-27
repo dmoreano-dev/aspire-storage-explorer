@@ -47,9 +47,11 @@ public sealed class AzuriteFixture : IAsyncLifetime
 
         await app.ResourceNotifications.WaitForResourceHealthyAsync("storage", cancellationToken);
 
-        var port = app.GetEndpoint("storage", "blob").Port;
-        ConnectionString = BuildConnectionString("127.0.0.1", port);
-        HostnameConnectionString = BuildConnectionString("localhost", port);
+        var blobPort = app.GetEndpoint("storage", "blob").Port;
+        var queuePort = app.GetEndpoint("storage", "queue").Port;
+        var tablePort = app.GetEndpoint("storage", "table").Port;
+        ConnectionString = BuildConnectionString("127.0.0.1", blobPort, queuePort, tablePort);
+        HostnameConnectionString = BuildConnectionString("localhost", blobPort, queuePort, tablePort);
 
         await WaitUntilAnswering(cancellationToken);
     }
@@ -67,10 +69,21 @@ public sealed class AzuriteFixture : IAsyncLifetime
             await app.DisposeAsync();
     }
 
-    /// <summary>A connection string for the emulator account at the given host and port.</summary>
+    /// <summary>
+    /// A connection string for the emulator account with only a blob endpoint, at the given host and port. Building a
+    /// queue or table client from it reaches for the real Azure endpoint of that name instead of the emulator (there is
+    /// no local default to fall back to), so this is for blob-only scenarios, such as an unreachable port.
+    /// </summary>
     public static string BuildConnectionString(string host, int port) =>
         $"DefaultEndpointsProtocol=http;AccountName={AccountName};AccountKey={AccountKey};" +
         $"BlobEndpoint=http://{host}:{port}/{AccountName};";
+
+    /// <summary>A connection string for the emulator account with its three endpoints, at the given host.</summary>
+    public static string BuildConnectionString(string host, int blobPort, int queuePort, int tablePort) =>
+        $"DefaultEndpointsProtocol=http;AccountName={AccountName};AccountKey={AccountKey};" +
+        $"BlobEndpoint=http://{host}:{blobPort}/{AccountName};" +
+        $"QueueEndpoint=http://{host}:{queuePort}/{AccountName};" +
+        $"TableEndpoint=http://{host}:{tablePort}/{AccountName};";
 
     // The container can be running before Azurite accepts requests.
     private async Task WaitUntilAnswering(CancellationToken cancellationToken)

@@ -6,10 +6,14 @@ const JSON_HEADERS = { ...REQUEST_HEADERS, 'Content-Type': 'application/json' };
 const els = {
   app: document.querySelector('.app'),
   riskBanner: document.getElementById('risk-banner'),
+  serviceButtons: document.querySelectorAll('.service-switch button'),
+  sidebarNav: document.getElementById('sidebar-nav'),
+  listTitle: document.getElementById('list-title'),
   containers: document.getElementById('containers'),
   containerFilter: document.getElementById('container-filter'),
   containerFilterField: document.getElementById('container-filter-field'),
   containerCount: document.getElementById('container-count'),
+  filterShortcutHint: document.getElementById('filter-shortcut-hint'),
   breadcrumb: document.getElementById('breadcrumb'),
   title: document.getElementById('title'),
   message: document.getElementById('message'),
@@ -20,6 +24,22 @@ const els = {
   listing: document.getElementById('listing'),
   sortHeaders: document.querySelectorAll('#entries th[data-sort]'),
   tbody: document.querySelector('#entries tbody'),
+  queueToolbar: document.getElementById('queue-toolbar'),
+  queueFilter: document.getElementById('queue-filter'),
+  queueFilterCount: document.getElementById('queue-filter-count'),
+  queueNote: document.getElementById('queue-note'),
+  queueListing: document.getElementById('queue-listing'),
+  messagesBody: document.querySelector('#messages tbody'),
+  tableToolbar: document.getElementById('table-toolbar'),
+  tableFilter: document.getElementById('table-filter'),
+  tableFilterClear: document.getElementById('table-filter-clear'),
+  tableFilterCount: document.getElementById('table-filter-count'),
+  tableListing: document.getElementById('table-listing'),
+  entitiesHeadRow: document.querySelector('#entities thead tr'),
+  entitiesBody: document.querySelector('#entities tbody'),
+  loadMoreBar: document.getElementById('load-more-bar'),
+  loadMoreSummary: document.getElementById('load-more-summary'),
+  loadMore: document.getElementById('load-more'),
   status: document.getElementById('status'),
   statusSource: document.getElementById('status-source'),
   statusEndpoint: document.getElementById('status-endpoint'),
@@ -55,6 +75,8 @@ const els = {
 };
 
 let connection = null;
+// Which service the sidebar and panel show: 'blobs', 'queues' or 'tables'.
+let service = 'blobs';
 let containers = [];
 let renderToken = 0;
 let statusTimer;
@@ -71,6 +93,26 @@ let searchScope = 'folder';
 let sort = { key: 'name', direction: 1 };
 // What must be typed to confirm a delete on an account that is not on this machine, or '' when nothing is asked.
 let requiredName = '';
+
+// --- Queues state --------------------------------------------------------------
+
+let queues = [];
+// The queue on screen, and the messages peeked from it (null before they load, or when none is selected).
+let activeQueue = null;
+let queueMessages = null;
+// Which messages (by id) have their detail row open.
+let expandedMessages = new Set();
+
+// --- Tables state --------------------------------------------------------------
+
+let tables = [];
+// The table on screen, its entities loaded so far (across every "Load more"), the columns to show them under (the
+// union of the keys seen so far, kept in the same order the server puts them in) and the token for the next page,
+// or null when there isn't one.
+let activeTable = null;
+let tableRows = [];
+let tableColumns = [];
+let tableContinuationToken = null;
 
 // Wait for a pause in typing before searching, since every search reads the listing from the account.
 const SEARCH_DELAY_MS = 250;
@@ -103,6 +145,8 @@ const ICONS = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
   monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16.5v.01"/>',
+  play: '<path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z"/>',
 };
 
 function icon(name) {
@@ -211,19 +255,39 @@ function setStatus(text) {
   statusTimer = setTimeout(() => { els.status.textContent = ''; }, 5000);
 }
 
-// --- Location: kept in the URL hash as #/<container>/<prefix> -----------------
+// --- Location: kept in the URL hash -------------------------------------------
+// Blobs: #/<container>/<prefix>. Queues: #queues or #queues/<queue>. Tables: #tables or #tables/<table>. Anything
+// else falls back to blobs.
 
-function parseLocation() {
+function parseHash() {
   const raw = location.hash.replace(/^#\/?/, '');
+
+  for (const service of ['queues', 'tables']) {
+    if (raw === service || raw.startsWith(`${service}/`)) {
+      const name = raw === service ? '' : safeDecode(raw.slice(service.length + 1));
+      return { service, name };
+    }
+  }
+
   const slash = raw.indexOf('/');
   const container = safeDecode(slash === -1 ? raw : raw.slice(0, slash));
   const prefix = slash === -1 ? '' : raw.slice(slash + 1).split('/').map(safeDecode).join('/');
-  return { container, prefix };
+  return { service: 'blobs', container, prefix };
 }
 
 function hashFor(container, prefix = '') {
   const encodedPrefix = prefix.split('/').map(encodeURIComponent).join('/');
   return `#/${encodeURIComponent(container)}/${encodedPrefix}`;
+}
+
+const hashForQueue = (queue) => (queue ? `#queues/${encodeURIComponent(queue)}` : '#queues');
+const hashForTable = (table) => (table ? `#tables/${encodeURIComponent(table)}` : '#tables');
+
+// The hash for whatever is the active service's sidebar list, given the name of one of its items.
+function hashForItem(name) {
+  if (service === 'queues') return hashForQueue(name);
+  if (service === 'tables') return hashForTable(name);
+  return hashFor(name);
 }
 
 // --- API -----------------------------------------------------------------------
@@ -247,35 +311,92 @@ async function getJson(url) {
   return (await api(url)).json();
 }
 
-const containerUrl = (container) => `${API}/containers/${encodeURIComponent(container)}`;
+const containerUrl = (container) => `${API}/blobs/containers/${encodeURIComponent(container)}`;
 const blobUrl = (container, path) => `${containerUrl(container)}/blob?path=${encodeURIComponent(path)}`;
+
+const queuesUrl = `${API}/queues`;
+const queueMessagesUrl = (queue) => `${queuesUrl}/${encodeURIComponent(queue)}/messages`;
+
+const tablesUrl = `${API}/tables`;
+function tableEntitiesUrl(table, filter, continuationToken) {
+  const params = new URLSearchParams();
+  if (filter) params.set('filter', filter);
+  if (continuationToken) params.set('continuationToken', continuationToken);
+
+  const query = params.toString();
+  return `${tablesUrl}/${encodeURIComponent(table)}/entities${query ? `?${query}` : ''}`;
+}
 
 // --- Rendering -----------------------------------------------------------------
 
-const containerTerm = () => els.containerFilter.value.trim();
+// The service switch decides what the sidebar list is a list of: containers, queues or tables. All three are named
+// things with a client-side substring filter, so one set of functions renders any of them, reusing the same markup.
 
-function matchingContainers() {
-  const needle = containerTerm().toLowerCase();
-  return containers.filter((container) => container.name.toLowerCase().includes(needle));
+const SIDEBAR_LABELS = {
+  blobs: { heading: 'Containers', placeholder: 'Search containers', empty: 'No containers match.', icon: 'container' },
+  queues: { heading: 'Queues', placeholder: 'Search queues', empty: 'No queues match.', icon: 'layers' },
+  tables: { heading: 'Tables', placeholder: 'Search tables', empty: 'No tables match.', icon: 'table' },
+};
+
+// The services besides Blobs (always there), and what says whether the account has them.
+const OPTIONAL_SERVICES = {
+  queues: 'hasQueues',
+  tables: 'hasTables',
+};
+
+const sidebarItems = () => (service === 'queues' ? queues : service === 'tables' ? tables : containers);
+const sidebarTerm = () => els.containerFilter.value.trim();
+
+function matchingSidebarItems() {
+  const needle = sidebarTerm().toLowerCase();
+  return sidebarItems().filter((item) => item.name.toLowerCase().includes(needle));
 }
 
-function renderContainers(active) {
-  const matching = matchingContainers();
-  const items = matching.map((container) => {
-    const item = el('li');
-    const anchor = link(hashFor(container.name));
-    anchor.title = container.name;
-    anchor.append(icon('container'), el('span', undefined, container.name));
-    if (container.name === active) anchor.setAttribute('aria-current', 'page');
-    item.append(anchor);
-    return item;
+function renderServiceSwitch() {
+  for (const button of els.serviceButtons) {
+    button.setAttribute('aria-pressed', String(button.dataset.service === service));
+
+    const hasKey = OPTIONAL_SERVICES[button.dataset.service];
+    if (!hasKey) continue; // Blobs is always there.
+
+    // The value has to be the string "true" and not just present: that is what the CSS and the click handler below
+    // check for.
+    const has = connection?.[hasKey] ?? false;
+    if (has) button.removeAttribute('aria-disabled');
+    else button.setAttribute('aria-disabled', 'true');
+    button.title = has || !connection ? '' : `This account has no ${button.dataset.service.slice(0, -1)} endpoint`;
+  }
+}
+
+function renderSidebarHeading() {
+  const labels = SIDEBAR_LABELS[service];
+  els.sidebarNav.setAttribute('aria-label', labels.heading);
+  els.listTitle.textContent = labels.heading;
+  els.containerFilter.placeholder = labels.placeholder;
+  els.containerFilter.setAttribute('aria-label', labels.placeholder);
+  els.filterShortcutHint.title = `Press / to ${labels.placeholder.toLowerCase()}`;
+}
+
+function renderSidebarList(active) {
+  const labels = SIDEBAR_LABELS[service];
+  const items = sidebarItems();
+  const matching = matchingSidebarItems();
+  const rows = matching.map((item) => {
+    const row = el('li');
+    const anchor = link(hashForItem(item.name));
+    anchor.title = item.name;
+    anchor.append(icon(labels.icon), el('span', 'sidebar-item-name', item.name));
+    if (service === 'queues') anchor.append(el('span', 'count', String(item.approximateMessageCount)));
+    if (item.name === active) anchor.setAttribute('aria-current', 'page');
+    row.append(anchor);
+    return row;
   });
 
-  if (containers.length > 0 && matching.length === 0) items.push(el('li', 'empty', 'No containers match.'));
+  if (items.length > 0 && matching.length === 0) rows.push(el('li', 'empty', labels.empty));
 
-  els.containerFilterField.hidden = containers.length === 0;
-  els.containerCount.textContent = containers.length > 0 ? String(containers.length) : '';
-  els.containers.replaceChildren(...items);
+  els.containerFilterField.hidden = items.length === 0;
+  els.containerCount.textContent = items.length > 0 ? String(items.length) : '';
+  els.containers.replaceChildren(...rows);
 }
 
 // The last segment of the path is the title; the ones before it are the breadcrumb.
@@ -308,11 +429,42 @@ function renderLocation(container, prefix) {
   els.statusPath.textContent = container ? [container, ...segments].join('/') : '';
 }
 
+function renderQueueLocation(queue) {
+  const crumbs = queue ? [link('#queues', 'Queues')] : [];
+
+  els.breadcrumb.replaceChildren(...crumbs);
+  els.title.textContent = queue || 'Queues';
+  els.statusPath.textContent = queue ?? '';
+}
+
+function renderTableLocation(table) {
+  const crumbs = table ? [link('#tables', 'Tables')] : [];
+
+  els.breadcrumb.replaceChildren(...crumbs);
+  els.title.textContent = table || 'Tables';
+  els.statusPath.textContent = table ?? '';
+}
+
 function hideListing() {
   listed = null;
   found = null;
   els.listing.hidden = true;
   els.toolbar.hidden = true;
+  els.itemCount.textContent = '';
+}
+
+function hideQueueListing() {
+  queueMessages = null;
+  els.queueListing.hidden = true;
+  els.itemCount.textContent = '';
+}
+
+function clearEntities() {
+  tableRows = [];
+  tableColumns = [];
+  tableContinuationToken = null;
+  els.tableListing.hidden = true;
+  els.loadMoreBar.hidden = true;
   els.itemCount.textContent = '';
 }
 
@@ -471,14 +623,45 @@ function renderRow(container, entry) {
 }
 
 async function render() {
+  // Named "route" and not "location" so it cannot be confused with (or shadow) window.location, which the rest of
+  // this file uses to navigate.
+  const route = parseHash();
+  service = route.service;
+
+  renderServiceSwitch();
+  renderSidebarHeading();
+
+  // The other services' panels are left exactly as they were, so switching back to one does not flash empty first;
+  // only the ones not shown are forced hidden here, and the active one manages its own listing and toolbar as it
+  // renders.
+  if (service !== 'blobs') {
+    els.listing.hidden = true;
+    els.toolbar.hidden = true;
+  }
+  if (service !== 'queues') {
+    els.queueListing.hidden = true;
+    els.queueToolbar.hidden = true;
+    els.queueNote.hidden = true;
+  }
+  if (service !== 'tables') {
+    els.tableListing.hidden = true;
+    els.tableToolbar.hidden = true;
+    els.loadMoreBar.hidden = true;
+  }
+
+  if (service === 'queues') await renderQueuesView(route.name);
+  else if (service === 'tables') await renderTablesView(route.name);
+  else await renderBlobsView(route.container, route.prefix);
+}
+
+async function renderBlobsView(container, prefix) {
   const token = ++renderToken;
-  const { container, prefix } = parseLocation();
 
   // A search in flight is about a listing that is being replaced.
   searchToken++;
   clearTimeout(searchTimer);
 
-  renderContainers(container);
+  renderSidebarList(container);
   renderLocation(container, prefix);
 
   // A search applies to the folder it was typed in.
@@ -508,6 +691,312 @@ async function render() {
     hideListing();
     showMessage(`Could not list "${container}": ${error.message}`, true);
   }
+}
+
+const queueFilterTerm = () => els.queueFilter.value.trim();
+
+// Peeking reads a handful of messages at once, so this filters the ones already on screen instead of asking the
+// server again.
+function matchingMessages() {
+  const needle = queueFilterTerm().toLowerCase();
+  const messages = queueMessages ?? [];
+
+  return needle
+    ? messages.filter((m) => m.text.toLowerCase().includes(needle) || m.messageId.toLowerCase().includes(needle))
+    : messages;
+}
+
+async function renderQueuesView(queue) {
+  const token = ++renderToken;
+  if (queue !== activeQueue) {
+    els.queueFilter.value = '';
+    expandedMessages = new Set();
+  }
+  activeQueue = queue || null;
+
+  renderSidebarList(activeQueue);
+  renderQueueLocation(activeQueue);
+
+  if (!activeQueue) {
+    els.queueToolbar.hidden = true;
+    els.queueNote.hidden = true;
+    hideQueueListing();
+    showMessage(queues.length === 0 ? 'No queues found.' : 'Select a queue to peek its messages.');
+    return;
+  }
+
+  try {
+    const messages = await getJson(queueMessagesUrl(activeQueue));
+    if (token !== renderToken) return;
+    queueMessages = messages;
+    renderQueueMessages();
+  } catch (error) {
+    if (token !== renderToken) return;
+    els.queueToolbar.hidden = true;
+    els.queueNote.hidden = true;
+    hideQueueListing();
+    showMessage(`Could not peek "${activeQueue}": ${error.message}`, true);
+  }
+}
+
+function renderQueueMessages() {
+  const all = queueMessages ?? [];
+  const messages = matchingMessages();
+  const term = queueFilterTerm();
+
+  els.messagesBody.replaceChildren(
+    ...messages.flatMap((message, index) => {
+      const expanded = expandedMessages.has(message.messageId);
+      return [renderMessageRow(message, index, expanded), renderMessageDetailRow(message, expanded)];
+    }),
+  );
+  els.queueToolbar.hidden = all.length === 0;
+  els.queueNote.hidden = all.length === 0;
+  els.queueListing.hidden = messages.length === 0;
+  els.queueFilterCount.textContent = term ? `${messages.length} found` : '';
+  els.itemCount.textContent = messages.length > 0 ? plural(messages.length, 'message') : '';
+
+  if (all.length === 0) showMessage('This queue has no messages to peek right now.');
+  else if (messages.length === 0) showMessage(`No peeked messages match "${term}".`);
+  else showMessage('');
+}
+
+function toggleMessageDetail(messageId) {
+  if (expandedMessages.has(messageId)) expandedMessages.delete(messageId);
+  else expandedMessages.add(messageId);
+  renderQueueMessages();
+}
+
+function renderMessageRow(message, index, expanded) {
+  const row = el('tr');
+
+  const num = el('td', 'col-index num', String(index + 1));
+
+  const id = el('td', 'col-message-id', message.messageId);
+  id.title = message.messageId;
+
+  const text = el('td', 'col-message-text', message.text);
+  text.title = message.text;
+
+  const inserted = el('td', 'col-inserted', formatDate(message.insertedOn));
+  if (message.insertedOn) inserted.title = new Date(message.insertedOn).toLocaleString();
+
+  const expires = el('td', 'col-expires', formatDate(message.expiresOn));
+  if (message.expiresOn) expires.title = new Date(message.expiresOn).toLocaleString();
+
+  const dequeue = el('td', 'num', String(message.dequeueCount));
+
+  const expand = el('td', 'col-expand');
+  const toggle = el('button', 'icon-button expand-toggle');
+  toggle.type = 'button';
+  toggle.setAttribute('aria-expanded', String(expanded));
+  toggle.setAttribute('aria-label', expanded ? 'Hide details' : 'Show details');
+  toggle.append(icon('chevron-down'));
+  toggle.addEventListener('click', () => toggleMessageDetail(message.messageId));
+  expand.append(toggle);
+
+  row.append(num, id, text, inserted, expires, dequeue, expand);
+  return row;
+}
+
+// The decoded body, the raw text behind it, and the exact (not "Today, …") dates: everything a collapsed row has no
+// room for. Copying is the one thing here that changes nothing in the account, so it needs no read-only guard.
+function renderMessageDetailRow(message, expanded) {
+  const row = el('tr', 'message-detail');
+  row.hidden = !expanded;
+
+  const cell = el('td');
+  cell.colSpan = 7;
+
+  const body = el('div', 'message-detail-body');
+
+  const left = el('div', 'message-detail-left');
+  const heading = el('div', 'message-detail-heading');
+  heading.append(el('span', 'message-detail-label', 'Body'));
+  if (message.textWasBase64Decoded) heading.append(el('span', 'tag info', 'Base64 decoded'));
+  left.append(heading, el('pre', 'message-detail-box', message.text));
+
+  const right = el('div', 'message-detail-right');
+  const actions = el('div', 'message-detail-actions');
+  const copyBody = el('button', 'primary-button', 'Copy body');
+  copyBody.type = 'button';
+  copyBody.addEventListener('click', () => copyToClipboard(message.text, 'Body'));
+  const copyRaw = el('button', 'outlined-button', 'Copy raw');
+  copyRaw.type = 'button';
+  copyRaw.addEventListener('click', () => copyToClipboard(message.rawText, 'Raw text'));
+  actions.append(copyBody, copyRaw);
+
+  const facts = el('dl', 'message-detail-facts');
+  const addFact = (term, value) => facts.append(el('dt', undefined, term), el('dd', undefined, value));
+  addFact('Inserted', message.insertedOn ? new Date(message.insertedOn).toLocaleString() : '—');
+  addFact('Expires', message.expiresOn ? new Date(message.expiresOn).toLocaleString() : '—');
+  addFact('Dequeue count', String(message.dequeueCount));
+
+  right.append(actions, facts);
+  body.append(left, right);
+  cell.append(body);
+  row.append(cell);
+  return row;
+}
+
+async function copyToClipboard(text, label) {
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus(`${label} copied.`);
+  } catch (error) {
+    showMessage(`Could not copy: ${error.message}`, true);
+  }
+}
+
+const tableFilterTerm = () => els.tableFilter.value.trim();
+
+async function renderTablesView(table) {
+  const token = ++renderToken;
+  if (table !== activeTable) els.tableFilter.value = '';
+  activeTable = table || null;
+
+  renderSidebarList(activeTable);
+  renderTableLocation(activeTable);
+
+  if (!activeTable) {
+    els.tableToolbar.hidden = true;
+    clearEntities();
+    showMessage(tables.length === 0 ? 'No tables found.' : 'Select a table to query its entities.');
+    return;
+  }
+
+  els.tableToolbar.hidden = false;
+  await queryEntities(token, tableFilterTerm());
+}
+
+// Runs a fresh query (its first page) for the active table with the given filter, replacing whatever was on screen.
+// The toolbar (so the filter can be fixed and retried) is left alone; only the listing reacts to a failure.
+async function queryEntities(token, filter) {
+  clearEntities();
+  els.tableFilterCount.textContent = filter ? 'Querying…' : '';
+
+  try {
+    const page = await getJson(tableEntitiesUrl(activeTable, filter, null));
+    if (token !== renderToken) return;
+    tableColumns = page.columns;
+    tableRows = page.entities;
+    tableContinuationToken = page.continuationToken;
+    renderEntitiesTable();
+  } catch (error) {
+    if (token !== renderToken) return;
+    els.tableFilterCount.textContent = '';
+    showMessage(`Could not query "${activeTable}": ${error.message}`, true);
+  }
+}
+
+// Reads the next page with the same table and filter and appends it, instead of replacing the page queryEntities
+// fetched. The button is disabled for the duration so a second click cannot fetch the same page twice.
+async function loadMoreEntities() {
+  if (!activeTable || !tableContinuationToken) return;
+
+  const token = renderToken;
+  els.loadMore.disabled = true;
+  try {
+    const page = await getJson(tableEntitiesUrl(activeTable, tableFilterTerm(), tableContinuationToken));
+    if (token !== renderToken) return;
+    tableColumns = mergeColumns(tableColumns, page.columns);
+    tableRows = [...tableRows, ...page.entities];
+    tableContinuationToken = page.continuationToken;
+    renderEntitiesTable();
+  } catch (error) {
+    if (token !== renderToken) return;
+    showMessage(`Could not load more entities: ${error.message}`, true);
+    els.loadMore.disabled = false;
+  }
+}
+
+// PartitionKey and RowKey stay first and Timestamp last, the same order the server puts them in; only the custom
+// columns in between are merged and re-sorted, in case a later page has properties an earlier one did not.
+function mergeColumns(existing, incoming) {
+  const leading = ['PartitionKey', 'RowKey'];
+  const middle = new Set([...existing, ...incoming].filter((column) => !leading.includes(column) && column !== 'Timestamp'));
+
+  return [...leading, ...[...middle].sort(), 'Timestamp'];
+}
+
+// Matches TableExplorerService.PageSize: only used to label the "Load next" button, the same way the mockup does.
+const TABLE_PAGE_SIZE = 100;
+
+function renderEntitiesTable() {
+  els.entitiesHeadRow.replaceChildren(...tableColumns.map(renderEntityHeader));
+  els.entitiesBody.replaceChildren(...tableRows.map(renderEntityRow));
+
+  els.tableListing.hidden = tableRows.length === 0;
+  els.loadMoreBar.hidden = tableRows.length === 0;
+  els.loadMore.hidden = !tableContinuationToken;
+  els.loadMore.textContent = `Load next ${TABLE_PAGE_SIZE}`;
+  els.loadMore.disabled = false;
+  els.loadMoreSummary.textContent = tableRows.length > 0
+    ? `Showing ${tableRows.length} ${tableRows.length === 1 ? 'entity' : 'entities'}.${tableContinuationToken ? ' There are more.' : ''}`
+    : '';
+
+  const term = tableFilterTerm();
+  els.tableFilterCount.textContent = term ? `${tableRows.length} found` : '';
+  els.itemCount.textContent = tableRows.length > 0 ? `${tableRows.length} ${tableRows.length === 1 ? 'entity' : 'entities'}` : '';
+
+  if (tableRows.length === 0) showMessage(term ? `No entities match "${term}".` : 'This table has no entities.');
+  else showMessage('');
+}
+
+function renderEntityHeader(column) {
+  const th = el('th');
+  const header = el('div', 'col-header');
+  header.append(el('span', undefined, column), el('span', 'col-type', inferColumnType(column)));
+  th.append(header);
+  return th;
+}
+
+// The server sends only the column names, not their type: this looks at the values loaded so far for one that says
+// it (any row's is good enough, since a column that mixes types is not something this explorer tries to represent).
+function inferColumnType(column) {
+  if (column === 'Timestamp') return 'datetime';
+
+  for (const row of tableRows) {
+    if (!(column in row) || row[column] === null) continue;
+    if (typeof row[column] === 'boolean') return 'bool';
+    if (typeof row[column] === 'number') return Number.isInteger(row[column]) ? 'int64' : 'double';
+    return 'string';
+  }
+
+  return 'string';
+}
+
+function renderEntityRow(row) {
+  const tr = el('tr');
+  tr.append(...tableColumns.map((column) => renderEntityCell(column, row)));
+  return tr;
+}
+
+function renderEntityCell(column, row) {
+  if (!(column in row)) return el('td', 'none', '—');
+
+  const value = row[column];
+  if (typeof value === 'boolean') {
+    const td = el('td');
+    td.append(el('span', `chip ${value}`, String(value)));
+    return td;
+  }
+
+  const isKey = column === 'PartitionKey' || column === 'RowKey';
+  const className = [isKey && 'entity-key', typeof value === 'number' && 'num'].filter(Boolean).join(' ') || undefined;
+  const td = el('td', className, formatEntityValue(column, value));
+  if (column === 'Timestamp' && value) td.title = new Date(value).toLocaleString();
+
+  return td;
+}
+
+// Every property comes back from the server as whatever JSON has (string, number, boolean or null): there is no way
+// to tell a date apart from a string that merely looks like one, so only Timestamp, always a date, is formatted as
+// one. A boolean is a chip instead (see renderEntityCell) and never reaches this.
+function formatEntityValue(column, value) {
+  if (value == null) return '';
+  if (column === 'Timestamp') return formatDate(value);
+  return String(value);
 }
 
 // The state of the connection is told in one place, the status bar, and by color everywhere else:
@@ -559,10 +1048,41 @@ async function loadConnection() {
 
 async function loadContainers() {
   try {
-    containers = await getJson(`${API}/containers`);
+    containers = await getJson(`${API}/blobs/containers`);
   } catch (error) {
     containers = [];
     showMessage(`Could not load containers: ${error.message}`, true);
+  }
+}
+
+// Only called once the connection is known, since an account without a queue endpoint has nothing to list here (the
+// server would otherwise answer 400 for a service the account does not have).
+async function loadQueues() {
+  if (!connection?.hasQueues) {
+    queues = [];
+    return;
+  }
+
+  try {
+    queues = await getJson(queuesUrl);
+  } catch (error) {
+    queues = [];
+    showMessage(`Could not load queues: ${error.message}`, true);
+  }
+}
+
+// Only called once the connection is known, for the same reason as loadQueues above.
+async function loadTables() {
+  if (!connection?.hasTables) {
+    tables = [];
+    return;
+  }
+
+  try {
+    tables = await getJson(tablesUrl);
+  } catch (error) {
+    tables = [];
+    showMessage(`Could not load tables: ${error.message}`, true);
   }
 }
 
@@ -613,6 +1133,8 @@ async function deleteBlob(container, entry) {
 
 async function refresh() {
   await Promise.all([loadConnection(), loadContainers()]);
+  // Both need connection.hasQueues/hasTables, so they run once loadConnection has set them.
+  await Promise.all([loadQueues(), loadTables()]);
   await render();
 }
 
@@ -737,14 +1259,19 @@ els.theme.addEventListener('click', () => {
 
 // --- Search, sort and keyboard -------------------------------------------------
 
-els.containerFilter.addEventListener('input', () => renderContainers(parseLocation().container));
+els.containerFilter.addEventListener('input', () => {
+  const route = parseHash();
+  renderSidebarList(service === 'blobs' ? route.container : route.name);
+});
 els.containerFilter.addEventListener('keydown', (event) => {
-  // Enter opens the first container that matches.
-  const [first] = matchingContainers();
-  if (event.key === 'Enter' && containerTerm() && first) location.hash = hashFor(first.name);
+  // Enter opens the first item that matches.
+  const [first] = matchingSidebarItems();
+  if (event.key !== 'Enter' || !sidebarTerm() || !first) return;
+
+  location.hash = hashForItem(first.name);
 });
 
-// "/" jumps to the container search, as it does in most tools with a list on the side.
+// "/" jumps to the sidebar search, as it does in most tools with a list on the side.
 document.addEventListener('keydown', (event) => {
   if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return;
   if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable]')) return;
@@ -769,6 +1296,30 @@ for (const button of els.scopeButtons) {
 for (const header of els.sortHeaders) {
   header.querySelector('button').addEventListener('click', () => sortBy(header.dataset.sort));
 }
+
+for (const button of els.serviceButtons) {
+  button.addEventListener('click', () => {
+    if (button.getAttribute('aria-disabled') === 'true') return;
+
+    const target = button.dataset.service;
+    if (target === service) return;
+
+    location.hash = target === 'queues' ? hashForQueue() : target === 'tables' ? hashForTable() : '#/';
+  });
+}
+
+els.queueFilter.addEventListener('input', renderQueueMessages);
+
+els.tableToolbar.addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (activeTable) queryEntities(++renderToken, tableFilterTerm());
+});
+els.tableFilterClear.addEventListener('click', () => {
+  if (!activeTable || !tableFilterTerm()) return;
+  els.tableFilter.value = '';
+  queryEntities(++renderToken, '');
+});
+els.loadMore.addEventListener('click', loadMoreEntities);
 
 els.refresh.addEventListener('click', refresh);
 window.addEventListener('hashchange', render);

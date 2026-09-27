@@ -1,7 +1,8 @@
 # Storage Explorer
 
-An [Aspire](https://aspire.dev) hosting integration that adds a small web UI to browse an Azure Blob Storage account.
-It is meant for local development with the Azurite emulator, so you don't need a separate storage explorer.
+An [Aspire](https://aspire.dev) hosting integration that adds a small web UI to browse an Azure Storage account: blobs,
+queues and tables. It is meant for local development with the Azurite emulator, so you don't need a separate storage
+explorer.
 
 ![Storage Explorer showing the containers of an account and the folders and files of one of them](assets/screenshots/overview.png)
 
@@ -9,7 +10,10 @@ It is meant for local development with the Azurite emulator, so you don't need a
 last modified), search them by name in a folder and everything below it or in the whole container, sort by any column,
 download a blob, and delete a blob after a confirmation that names the account (on an account that is not on your
 machine you also type the name of the blob). Deleting is only enabled for local endpoints unless you say otherwise (see
-[Read-only](#read-only)).
+[Read-only](#read-only)). Queues and tables are read-only for now: list queues with their message count and peek up to
+32 messages (ones written Base64-encoded are decoded automatically); list tables and query their entities with an
+OData filter, dynamic columns and paging. A **Blobs | Queues | Tables** switch above the list picks which one you're
+browsing, showing only the services the connected account has.
 
 **Requirements:** .NET 10, Aspire 13.1 or later and Docker (the explorer runs as a container next to the emulator).
 Keep every `Aspire.*` package of your AppHost at the same version as its SDK (`Aspire.AppHost.Sdk`): mixing versions
@@ -103,8 +107,8 @@ not recognized as local counts as remote.
 dotnet run --project samples/Sample.AppHost
 ```
 
-The sample starts Azurite, seeds a few containers with nested folders, and adds the explorer. To skip the seeding, set
-`Seed:Enabled` to `false`:
+The sample starts Azurite, seeds a few containers with nested folders, queues with messages and tables with entities,
+and adds the explorer. To skip the seeding, set `Seed:Enabled` to `false`:
 
 ```bash
 dotnet run --project samples/Sample.AppHost -- --Seed:Enabled=false
@@ -131,7 +135,11 @@ first; it gets the same tag the extension uses, so the sample runs it:
 
 ## Limitations
 
-- Blob Storage only (no queues, tables or file shares). Each folder listing is capped at 5,000 entries.
+- No file shares.
+- Queues and tables are read-only: no deleting a message, clearing or deleting a queue, or deleting an entity or a
+  table yet. Peeking a queue reads up to 32 messages; querying a table reads up to 100 entities a page, with
+  **Load more** for the rest.
+- Each blob folder listing is capped at 5,000 entries.
 - Azure can only filter blobs by prefix, so a search reads the listing and filters it: it stops after 50,000 blobs or
   5,000 matches, and the page tells you when it did.
 - Keep the storage resource on `RunAsEmulator()`. Without it Aspire provisions Azure resources and the explorer waits
@@ -146,7 +154,7 @@ first; it gets the same tag the extension uses, so the sample runs it:
 | `src/StorageExplorer.Web` | ASP.NET Core minimal API plus a static page (no build step), and the `Dockerfile` |
 | `src/StorageExplorer.Aspire.Hosting` | The Aspire extension, packed as the NuGet package `StorageExplorer.Aspire.Hosting` |
 | `samples/Sample.AppHost` | Aspire app that uses the extension |
-| `samples/Sample.Seeder` | Fills the emulator with sample blobs |
+| `samples/Sample.Seeder` | Fills the emulator with sample blobs, queues and tables |
 | `tests/StorageExplorer.Tests` | Unit tests, and tests of the web app with the storage replaced. No Docker needed |
 | `tests/StorageExplorer.IntegrationTests` | The web app against a real Azurite that Aspire starts. Needs Docker |
 | `tests/StorageExplorer.TestAppHost` | The Aspire app the integration tests start: only Azurite |

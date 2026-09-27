@@ -221,7 +221,8 @@ kbd {
   color: var(--accent);
   font-weight: 600;
 }
-/* Queues and Tables are not implemented yet: the buttons stay so the layout does not change when they arrive. */
+/* Queues and Tables are disabled when the account has no queue or table endpoint; the button stays so the layout
+   does not change once it is enabled. */
 .service-switch button[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
 
 .list-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
@@ -281,6 +282,9 @@ kbd {
 #containers a:hover { background: var(--accent-wash); text-decoration: none; }
 #containers a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 #containers .empty { padding: 4px 10px; color: var(--muted); }
+#containers .sidebar-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The approximate message count next to a queue. */
+#containers a .count { flex-shrink: 0; }
 
 /* --- Panel ------------------------------------------------------------------- */
 
@@ -336,6 +340,18 @@ kbd {
   font-weight: 500;
 }
 .filter-count { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+.outlined-button {
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+.outlined-button:hover { border-color: var(--muted); background: var(--accent-wash); }
 
 .message { margin: 0; padding: 16px 24px; color: var(--muted); }
 .message.error { color: var(--danger); }
@@ -421,6 +437,148 @@ td.none { color: var(--muted); }
 .row-actions { display: flex; justify-content: flex-end; gap: 6px; opacity: 0; transition: opacity 0.1s; }
 tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
 @media (hover: none) { .row-actions { opacity: 1; } }
+
+/* --- Queue messages ------------------------------------------------------------ */
+/* A row shows a message's text clipped to one line; expanding it (the chevron, last column) opens a detail row below
+   with the full body, both an id and a text GUID clip the same way, wide as they are. */
+
+#messages th.col-index { width: 44px; }
+#messages th.col-message-id { width: 160px; }
+#messages th.col-inserted, #messages th.col-expires { width: 150px; }
+#messages th.col-dequeue { width: 110px; }
+#messages th.col-expand { width: 40px; }
+#messages td { height: auto; padding: 12px; vertical-align: top; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#messages td.col-index, #messages td.col-message-id {
+  padding-top: 14px;
+  color: var(--muted);
+  font: 12.5px var(--mono);
+}
+#messages td.col-message-text { font: 12.5px var(--mono); }
+#messages td.col-inserted, #messages td.col-expires { padding-top: 14px; color: var(--muted); font-size: 13px; }
+#messages td.col-expand { padding: 8px 12px; text-align: right; }
+
+.expand-toggle svg.icon { transition: transform 0.15s; }
+.expand-toggle[aria-expanded="true"] svg.icon { transform: rotate(180deg); }
+
+.message-detail td { padding: 0; overflow: visible; white-space: normal; }
+.message-detail-body { display: flex; gap: 28px; box-sizing: border-box; padding: 2px 24px 18px 68px; }
+.message-detail-left { flex-grow: 1; min-width: 0; }
+.message-detail-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.message-detail-label { font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.message-detail-box {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font: 12.5px var(--mono);
+  line-height: 1.65;
+}
+.message-detail-right { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
+.message-detail-actions { display: flex; gap: 8px; }
+.message-detail-right .outlined-button { height: 32px; padding: 0 14px; }
+.message-detail-facts { margin: 0; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 4px 8px; font-size: 12.5px; }
+.message-detail-facts dt { margin: 0; color: var(--muted); }
+.message-detail-facts dd { margin: 0; font-family: var(--mono); }
+
+.primary-button {
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.primary-button:hover { opacity: 0.92; }
+
+.tag.info { background: var(--accent-soft); color: var(--accent); }
+
+/* A note banner, e.g. "peeking does not change the queue". */
+.note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 24px 0 16px;
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: var(--tile-data-bg);
+  font-size: 13px;
+}
+.note svg.icon { flex-shrink: 0; color: var(--tile-data-fg); }
+
+/* --- Table entities ------------------------------------------------------------ */
+/* The columns are only known once a page loads, and how many and how wide they are varies by table, so this table
+   sizes its columns by content instead of the fixed layout the others use. */
+
+#entities { table-layout: auto; }
+/* display:flex directly on a th, a table-cell box, drops it out of the row's cell layout (every header ends up
+   stacked in one column instead of side by side): the flex column goes on a plain div inside the cell instead. */
+#entities th .col-header { display: flex; flex-direction: column; gap: 2px; }
+#entities th .col-type { font: 11px var(--mono); font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
+#entities td {
+  height: auto;
+  padding: 10px 12px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  vertical-align: top;
+  font: 12.5px var(--mono);
+}
+#entities td.entity-key { font-weight: 600; }
+#entities td.none { color: var(--muted); }
+#entities td.num { text-align: right; }
+
+.chip { display: inline-block; max-width: 100%; padding: 1px 8px; border-radius: 6px; font: 500 12px var(--font); }
+.chip.true { background: var(--tile-sheet-bg); color: var(--tile-sheet-fg); }
+.chip.false { background: var(--tile-plain-bg); color: var(--tile-plain-fg); }
+
+/* A labeled OData filter, closer to a query box than the plain name search the other services use. */
+.table-toolbar { padding: 16px 24px; }
+.table-toolbar label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.table-toolbar .hint-inline { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.table-toolbar .hint { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
+.table-toolbar .hint code { color: var(--text); font-family: var(--mono); }
+.table-toolbar .filter-count { display: block; margin-top: 6px; }
+.table-toolbar .outlined-button { height: 38px; }
+
+.odata-field { display: flex; align-items: center; gap: 8px; }
+.odata-field input {
+  flex-grow: 1;
+  min-width: 0;
+  height: 38px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: 13px var(--mono);
+}
+.odata-field input:focus-visible { border-color: var(--accent); outline: 0; }
+
+.run-button {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.run-button:hover { opacity: 0.92; }
+.run-button svg.icon { width: 13px; height: 13px; }
+
+#load-more-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-top: 1px solid var(--divider); }
+#load-more-summary { color: var(--muted); font-size: 13px; }
 
 /* --- Status bar -------------------------------------------------------------- */
 
@@ -551,6 +709,9 @@ dialog menu button:disabled { opacity: 0.45; cursor: not-allowed; }
   thead th { position: static; }
   th.col-type, td.type, th.col-modified, td.modified { display: none; }
   th.col-size { width: 84px; }
+  th.col-inserted, td.col-inserted, th.col-expires, td.col-expires { display: none; }
+  th.col-message-id, td.col-message-id { display: none; }
+  .odata-field { flex-wrap: wrap; }
   .statusbar { flex-wrap: wrap; gap: 6px 16px; padding: 6px 12px; }
   .status { flex-basis: 100%; order: 3; text-align: left; }
 }

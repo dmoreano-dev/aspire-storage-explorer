@@ -1,6 +1,10 @@
 using Azure;
+using Azure.Data.Tables;
+using Azure.Data.Tables.Models;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure.Storage.Queues;
+using Azure.Storage.Queues.Models;
 using Microsoft.Extensions.Options;
 
 namespace StorageExplorer.Web.Tests;
@@ -84,6 +88,128 @@ public class StorageConnectionTests
         Assert.DoesNotContain(TestConnectionStrings.EmulatorKey, actual.ToString());
     }
 
+    // ---- queues and tables ----
+
+    [Fact]
+    public void Info_ConnectionStringWithoutAccountName_HasNoQueuesOrTables()
+    {
+        // Arrange
+        // A blob container SAS carries no AccountName, so a queue or table client cannot be built from it at all.
+        var connection = Create(TestConnectionStrings.BlobSasOnly);
+
+        // Act
+        var actual = connection.Info;
+
+        // Assert
+        Assert.False(actual.HasQueues);
+        Assert.False(actual.HasTables);
+    }
+
+    [Fact]
+    public void Info_ConnectionStringWithAccountName_HasQueuesAndTables()
+    {
+        // Arrange
+        // AccountName lets a queue and table client be built even without their own explicit endpoint (the SDK
+        // derives one); the AppHost connection is never probed over the network at startup, so this only says a
+        // client could be built, not that the account actually offers the service.
+        var connection = Create(TestConnectionStrings.Local);
+
+        // Act
+        var actual = connection.Info;
+
+        // Assert
+        Assert.True(actual.HasQueues);
+        Assert.True(actual.HasTables);
+    }
+
+    [Fact]
+    public async Task UseAsync_QueueAndTableThatListSuccessfully_SetsHasQueuesAndHasTablesTrue()
+    {
+        // Arrange
+        var connection = Create(TestConnectionStrings.Local);
+        var clients = new StorageClients(
+            new StubClient(TestConnectionStrings.Remote),
+            new StubQueueClient(TestConnectionStrings.Remote),
+            new StubTableClient(TestConnectionStrings.Remote));
+
+        // Act
+        await connection.UseAsync(clients, allowWrites: false, default);
+
+        // Assert
+        Assert.True(connection.Info.HasQueues);
+        Assert.True(connection.Info.HasTables);
+    }
+
+    [Fact]
+    public async Task UseAsync_NullQueueAndTableClients_SetsHasQueuesAndHasTablesFalse()
+    {
+        // Arrange
+        // A client that could not be built at all (a connection string with no AccountName) never gets probed.
+        var connection = Create(TestConnectionStrings.Local);
+        var clients = new StorageClients(new StubClient(TestConnectionStrings.Remote), null, null);
+
+        // Act
+        await connection.UseAsync(clients, allowWrites: false, default);
+
+        // Assert
+        Assert.False(connection.Info.HasQueues);
+        Assert.False(connection.Info.HasTables);
+    }
+
+    [Fact]
+    public async Task UseAsync_QueueThatFailsToList_SetsHasQueuesFalseButStillSwitchesConnection()
+    {
+        // Arrange
+        // An account kind that has no queues (or one the credentials cannot reach) fails the probe, but that is not
+        // reason enough to refuse the whole connection: only the blob check is mandatory.
+        var connection = Create(TestConnectionStrings.Local);
+        var queue = new StubQueueClient(TestConnectionStrings.Remote, new RequestFailedException(403, "nope"));
+        var clients = new StorageClients(new StubClient(TestConnectionStrings.Remote), queue, null);
+
+        // Act
+        await connection.UseAsync(clients, allowWrites: false, default);
+
+        // Assert
+        Assert.True(connection.Info.IsCustom);
+        Assert.False(connection.Info.HasQueues);
+    }
+
+    [Fact]
+    public async Task UseAsync_TableThatFailsToList_SetsHasTablesFalseButStillSwitchesConnection()
+    {
+        // Arrange
+        var connection = Create(TestConnectionStrings.Local);
+        var table = new StubTableClient(TestConnectionStrings.Remote, new RequestFailedException(403, "nope"));
+        var clients = new StorageClients(new StubClient(TestConnectionStrings.Remote), null, table);
+
+        // Act
+        await connection.UseAsync(clients, allowWrites: false, default);
+
+        // Assert
+        Assert.True(connection.Info.IsCustom);
+        Assert.False(connection.Info.HasTables);
+    }
+
+    [Fact]
+    public async Task UseAsync_BlobCheckFails_NeverListsQueuesOrTables()
+    {
+        // Arrange
+        // The blob check runs first and is the one that decides whether the switch happens at all; queues and
+        // tables are only worth probing once that passed.
+        var connection = Create(TestConnectionStrings.Local);
+        var failure = new RequestFailedException(403, "Server failed to authenticate the request.", "AuthenticationFailed", null);
+        var queue = new StubQueueClient(TestConnectionStrings.Remote);
+        var table = new StubTableClient(TestConnectionStrings.Remote);
+        var clients = new StorageClients(new StubClient(TestConnectionStrings.Remote, failure), queue, table);
+
+        // Act
+        await Assert.ThrowsAsync<RequestFailedException>(() => connection.UseAsync(clients, allowWrites: true, default));
+
+        // Assert
+        Assert.Equal(0, queue.Listed);
+        Assert.Equal(0, table.Listed);
+    }
+
     // ---- a connection typed in the page ----
 
     [Fact]
@@ -91,10 +217,10 @@ public class StorageConnectionTests
     {
         // Arrange
         var connection = Create(TestConnectionStrings.Local);
-        var client = new StubClient(TestConnectionStrings.Remote);
+        var clients = new StorageClients(new StubClient(TestConnectionStrings.Remote), null, null);
 
         // Act
-        await connection.UseAsync(client, allowWrites: false, default);
+        await connection.UseAsync(clients, allowWrites: false, default);
 
         // Assert
         Assert.True(connection.Info.IsCustom);
@@ -108,10 +234,10 @@ public class StorageConnectionTests
     {
         // Arrange
         var connection = Create(TestConnectionStrings.Local);
-        var client = new StubClient(TestConnectionStrings.Remote);
+        var clients = new StorageClients(new StubClient(TestConnectionStrings.Remote), null, null);
 
         // Act
-        await connection.UseAsync(client, allowWrites: true, default);
+        await connection.UseAsync(clients, allowWrites: true, default);
 
         // Assert
         Assert.False(connection.Info.ReadOnly);
@@ -124,10 +250,10 @@ public class StorageConnectionTests
     {
         // Arrange
         var connection = Create(TestConnectionStrings.Remote);
-        var client = new StubClient(TestConnectionStrings.Local);
+        var clients = new StorageClients(new StubClient(TestConnectionStrings.Local), null, null);
 
         // Act
-        await connection.UseAsync(client, allowWrites, default);
+        await connection.UseAsync(clients, allowWrites, default);
 
         // Assert
         Assert.True(connection.Info.IsLocal);
@@ -141,10 +267,10 @@ public class StorageConnectionTests
     {
         // Arrange
         var connection = Create(TestConnectionStrings.Local, readOnly: true);
-        var client = new StubClient(TestConnectionStrings.Remote);
+        var clients = new StorageClients(new StubClient(TestConnectionStrings.Remote), null, null);
 
         // Act
-        await connection.UseAsync(client, allowWrites, default);
+        await connection.UseAsync(clients, allowWrites, default);
 
         // Assert
         Assert.True(connection.Info.ReadOnly);
@@ -158,10 +284,10 @@ public class StorageConnectionTests
     {
         // Arrange
         var connection = Create(TestConnectionStrings.Local, readOnly: true);
-        var client = new StubClient(TestConnectionStrings.Local);
+        var clients = new StorageClients(new StubClient(TestConnectionStrings.Local), null, null);
 
         // Act
-        await connection.UseAsync(client, allowWrites, default);
+        await connection.UseAsync(clients, allowWrites, default);
 
         // Assert
         Assert.True(connection.Info.ReadOnly);
@@ -172,10 +298,10 @@ public class StorageConnectionTests
     {
         // Arrange
         var connection = Create(TestConnectionStrings.Local, readOnly: false);
-        var client = new StubClient(TestConnectionStrings.Remote);
+        var clients = new StorageClients(new StubClient(TestConnectionStrings.Remote), null, null);
 
         // Act
-        await connection.UseAsync(client, allowWrites: false, default);
+        await connection.UseAsync(clients, allowWrites: false, default);
 
         // Assert
         Assert.True(connection.Info.ReadOnly);
@@ -187,13 +313,14 @@ public class StorageConnectionTests
         // Arrange
         var connection = Create(TestConnectionStrings.Local);
         var client = new StubClient(TestConnectionStrings.Remote);
+        var clients = new StorageClients(client, null, null);
 
         // Act
-        await connection.UseAsync(client, allowWrites: false, default);
+        await connection.UseAsync(clients, allowWrites: false, default);
 
         // Assert
         Assert.Equal(1, client.Listed);
-        Assert.Same(client, connection.Client);
+        Assert.Same(client, connection.Blob);
     }
 
     [Fact]
@@ -201,17 +328,17 @@ public class StorageConnectionTests
     {
         // Arrange
         var connection = Create(TestConnectionStrings.Local);
-        var before = connection.Client;
+        var before = connection.Blob;
         var failure = new RequestFailedException(403, "Server failed to authenticate the request.", "AuthenticationFailed", null);
-        var client = new StubClient(TestConnectionStrings.Remote, failure);
+        var clients = new StorageClients(new StubClient(TestConnectionStrings.Remote, failure), null, null);
 
         // Act
         var thrown = await Assert.ThrowsAsync<RequestFailedException>(() =>
-            connection.UseAsync(client, allowWrites: true, default));
+            connection.UseAsync(clients, allowWrites: true, default));
 
         // Assert
         Assert.Same(failure, thrown);
-        Assert.Same(before, connection.Client);
+        Assert.Same(before, connection.Blob);
         Assert.False(connection.Info.IsCustom);
         Assert.Equal("devstoreaccount1", connection.Info.AccountName);
     }
@@ -221,14 +348,14 @@ public class StorageConnectionTests
     {
         // Arrange
         var connection = Create(TestConnectionStrings.Remote);
-        var original = connection.Client;
-        await connection.UseAsync(new StubClient(TestConnectionStrings.Local), allowWrites: false, default);
+        var original = connection.Blob;
+        await connection.UseAsync(new StorageClients(new StubClient(TestConnectionStrings.Local), null, null), allowWrites: false, default);
 
         // Act
         connection.Reset();
 
         // Assert
-        Assert.Same(original, connection.Client);
+        Assert.Same(original, connection.Blob);
         Assert.False(connection.Info.IsCustom);
         Assert.Equal("prodaccount", connection.Info.AccountName);
         Assert.True(connection.Info.ReadOnly);
@@ -261,13 +388,49 @@ public class StorageConnectionTests
 
             return failure is null
                 ? AsyncPageable<BlobContainerItem>.FromPages([Page<BlobContainerItem>.FromValues([], null, null!)])
-                : new FailingPageable(failure);
+                : new FailingPageable<BlobContainerItem>(failure);
         }
     }
 
-    private sealed class FailingPageable(Exception failure) : AsyncPageable<BlobContainerItem>
+    /// <summary>A client whose queue listing answers with an empty page, or fails, without any network.</summary>
+    private sealed class StubQueueClient(string connectionString, Exception? failure = null) : QueueServiceClient(connectionString)
     {
-        public override async IAsyncEnumerable<Page<BlobContainerItem>> AsPages(
+        public int Listed { get; private set; }
+
+        public override AsyncPageable<QueueItem> GetQueuesAsync(
+            QueueTraits traits = QueueTraits.None,
+            string? prefix = null,
+            CancellationToken cancellationToken = default)
+        {
+            Listed++;
+
+            return failure is null
+                ? AsyncPageable<QueueItem>.FromPages([Page<QueueItem>.FromValues([], null, null!)])
+                : new FailingPageable<QueueItem>(failure);
+        }
+    }
+
+    /// <summary>A client whose table listing answers with an empty page, or fails, without any network.</summary>
+    private sealed class StubTableClient(string connectionString, Exception? failure = null) : TableServiceClient(connectionString)
+    {
+        public int Listed { get; private set; }
+
+        public override AsyncPageable<TableItem> QueryAsync(
+            string? filter = null,
+            int? maxPerPage = null,
+            CancellationToken cancellationToken = default)
+        {
+            Listed++;
+
+            return failure is null
+                ? AsyncPageable<TableItem>.FromPages([Page<TableItem>.FromValues([], null, null!)])
+                : new FailingPageable<TableItem>(failure);
+        }
+    }
+
+    private sealed class FailingPageable<T>(Exception failure) : AsyncPageable<T> where T : notnull
+    {
+        public override async IAsyncEnumerable<Page<T>> AsPages(
             string? continuationToken = null,
             int? pageSizeHint = null)
         {

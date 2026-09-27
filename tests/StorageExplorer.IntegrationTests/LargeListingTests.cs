@@ -1,3 +1,5 @@
+using StorageExplorer.Web.Blobs;
+
 namespace StorageExplorer.Web.IntegrationTests;
 
 /// <summary>

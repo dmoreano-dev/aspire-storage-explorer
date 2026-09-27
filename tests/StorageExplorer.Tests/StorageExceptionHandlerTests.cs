@@ -98,6 +98,39 @@ public class StorageExceptionHandlerTests
     }
 
     [Fact]
+    public async Task TryHandleAsync_RealSdkMessageWithDiagnosticBlock_DropsStatusErrorCodeContentAndHeaders()
+    {
+        // Arrange
+        // What a real Azure/Azurite failure's Message actually looks like: the service's own error text (here with a
+        // RequestId and a timestamp folded in, which is normal for these APIs) followed by a block the SDK appends
+        // itself, starting at a line reading exactly "Status: ".
+        var message =
+            "The query condition specified in the request is invalid.\n" +
+            "RequestId:8cce37ca-9279-487b-a84a-9800c276e7fc\n" +
+            "Time:2026-09-27T10:44:53.661Z\n" +
+            "Status: 400 (Bad Request)\n" +
+            "ErrorCode: InvalidInput\n" +
+            "\n" +
+            "Content:\n" +
+            "{\"odata.error\":{\"code\":\"InvalidInput\"}}\n" +
+            "\n" +
+            "Headers:\n" +
+            "Server: Azurite-Table/3.35.0\n" +
+            "x-ms-error-code: REDACTED";
+        var failure = new RequestFailedException(400, message, "InvalidInput", null);
+
+        // Act
+        var (_, problem) = await RequestContainersFailingWith(failure);
+
+        // Assert
+        Assert.Equal(
+            "InvalidInput: The query condition specified in the request is invalid.\n" +
+            "RequestId:8cce37ca-9279-487b-a84a-9800c276e7fc\n" +
+            "Time:2026-09-27T10:44:53.661Z",
+            problem.GetProperty("detail").GetString());
+    }
+
+    [Fact]
     public async Task TryHandleAsync_NonErrorStatus_ReturnsBadGateway()
     {
         // Arrange
@@ -133,7 +166,7 @@ public class StorageExceptionHandlerTests
         using var host = new ApiHost(runningInContainer: runningInContainer);
         host.Explorer.Fails = failure;
 
-        var response = await host.Client.GetAsync("/api/containers");
+        var response = await host.Client.GetAsync("/api/blobs/containers");
 
         return (response.StatusCode, await response.Content.ReadFromJsonAsync<JsonElement>());
     }

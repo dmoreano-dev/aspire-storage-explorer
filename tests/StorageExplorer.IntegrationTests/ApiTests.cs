@@ -62,7 +62,7 @@ public sealed class ApiTests(AzuriteFixture azurite) : IAsyncLifetime
         using var client = Start();
 
         // Act
-        var actual = await client.GetFromJsonAsync<JsonElement>("/api/containers");
+        var actual = await client.GetFromJsonAsync<JsonElement>("/api/blobs/containers");
 
         // Assert
         Assert.Contains(actual.EnumerateArray(), c => c.GetProperty("name").GetString() == container.Name);
@@ -75,7 +75,7 @@ public sealed class ApiTests(AzuriteFixture azurite) : IAsyncLifetime
         using var client = Start();
 
         // Act
-        var actual = await client.GetFromJsonAsync<JsonElement>($"/api/containers/{container.Name}/entries");
+        var actual = await client.GetFromJsonAsync<JsonElement>($"/api/blobs/containers/{container.Name}/entries");
 
         // Assert
         Assert.Equal(["2025", "readme.txt"], actual.GetProperty("entries").EnumerateArray().Select(e => e.GetProperty("name").GetString()));
@@ -88,7 +88,7 @@ public sealed class ApiTests(AzuriteFixture azurite) : IAsyncLifetime
         using var client = Start();
 
         // Act
-        var actual = await client.GetFromJsonAsync<JsonElement>($"/api/containers/{container.Name}/entries?prefix=2025/");
+        var actual = await client.GetFromJsonAsync<JsonElement>($"/api/blobs/containers/{container.Name}/entries?prefix=2025/");
 
         // Assert
         Assert.Equal(["q1", "notes.txt"], actual.GetProperty("entries").EnumerateArray().Select(e => e.GetProperty("name").GetString()));
@@ -101,7 +101,7 @@ public sealed class ApiTests(AzuriteFixture azurite) : IAsyncLifetime
         using var client = Start();
 
         // Act
-        var actual = await client.GetFromJsonAsync<JsonElement>($"/api/containers/{container.Name}/search?q=REPORT");
+        var actual = await client.GetFromJsonAsync<JsonElement>($"/api/blobs/containers/{container.Name}/search?q=REPORT");
 
         // Assert
         var entry = Assert.Single(actual.GetProperty("entries").EnumerateArray());
@@ -144,7 +144,7 @@ public sealed class ApiTests(AzuriteFixture azurite) : IAsyncLifetime
         using var client = Start();
 
         // Act
-        var response = await client.GetAsync("/api/containers/no-such-container/entries");
+        var response = await client.GetAsync("/api/blobs/containers/no-such-container/entries");
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
 
         // Assert
@@ -252,7 +252,7 @@ public sealed class ApiTests(AzuriteFixture azurite) : IAsyncLifetime
         using var client = Start(readOnly: true);
 
         // Act
-        var response = await client.GetAsync($"/api/containers/{container.Name}/entries");
+        var response = await client.GetAsync($"/api/blobs/containers/{container.Name}/entries");
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -342,7 +342,7 @@ public sealed class ApiTests(AzuriteFixture azurite) : IAsyncLifetime
         // Assert
         Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
         Assert.Contains("Check that the service is running", problem.GetProperty("detail").GetString());
-        var containers = await client.GetAsync("/api/containers");
+        var containers = await client.GetAsync("/api/blobs/containers");
         Assert.Equal(HttpStatusCode.OK, containers.StatusCode);
     }
 
@@ -402,7 +402,7 @@ public sealed class ApiTests(AzuriteFixture azurite) : IAsyncLifetime
     }
 
     private static string Blob(string container, string path) =>
-        $"/api/containers/{container}/blob?path={Uri.EscapeDataString(path)}";
+        $"/api/blobs/containers/{container}/blob?path={Uri.EscapeDataString(path)}";
 
     private static HttpContent Connection(string connectionString, bool allowWrites = false) =>
         JsonContent.Create(new { connectionString, allowWrites });

@@ -1,0 +1,143 @@
+using System.Text;
+using Azure;
+using StorageExplorer.Web.Queues;
+
+namespace StorageExplorer.Web.IntegrationTests;
+
+/// <summary>The service against a real Azurite: what the emulator does is what the tests believe.</summary>
+[Collection(AzuriteCollection.Name)]
+public sealed class QueueExplorerServiceTests(AzuriteFixture azurite) : IAsyncLifetime
+{
+    private TestQueue queue = null!;
+    private QueueExplorerService service = null!;
+
+    public async Task InitializeAsync()
+    {
+        queue = await TestQueue.CreateAsync(azurite);
+        service = queue.Service();
+    }
+
+    public async Task DisposeAsync() => await queue.DisposeAsync();
+
+    // ---- queues ----
+
+    [Fact]
+    public async Task ListQueuesAsync_EmptyQueue_ReturnsItWithZeroMessages()
+    {
+        // Act
+        var actual = await service.ListQueuesAsync(default);
+
+        // Assert
+        var listed = Assert.Single(actual, q => q.Name == queue.Name);
+        Assert.Equal(0, listed.ApproximateMessageCount);
+    }
+
+    [Fact]
+    public async Task ListQueuesAsync_QueueWithMessages_ReturnsApproximateMessageCount()
+    {
+        // Arrange
+        await queue.SendAsync("a");
+        await queue.SendAsync("b");
+        await queue.SendAsync("c");
+
+        // Act
+        var actual = await service.ListQueuesAsync(default);
+
+        // Assert
+        var listed = Assert.Single(actual, q => q.Name == queue.Name);
+        Assert.Equal(3, listed.ApproximateMessageCount);
+    }
+
+    // ---- messages ----
+
+    [Fact]
+    public async Task PeekMessagesAsync_PlainTextMessage_ReturnsItUndecoded()
+    {
+        // Arrange
+        await queue.SendAsync("hello world");
+
+        // Act
+        var actual = await service.PeekMessagesAsync(queue.Name, default);
+
+        // Assert
+        var message = Assert.Single(actual);
+        Assert.Equal("hello world", message.Text);
+        Assert.False(message.TextWasBase64Decoded);
+        Assert.Equal("hello world", message.RawText);
+    }
+
+    [Fact]
+    public async Task PeekMessagesAsync_Base64EncodedMessage_DecodesIt()
+    {
+        // Arrange
+        // What another SDK, or an Azure Functions queue trigger, typically leaves behind.
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes("hello from a function"));
+        await queue.SendAsync(encoded);
+
+        // Act
+        var actual = await service.PeekMessagesAsync(queue.Name, default);
+
+        // Assert
+        var message = Assert.Single(actual);
+        Assert.Equal("hello from a function", message.Text);
+        Assert.True(message.TextWasBase64Decoded);
+        Assert.Equal(encoded, message.RawText);
+    }
+
+    [Fact]
+    public async Task PeekMessagesAsync_DoesNotHideTheMessageOrRaiseDequeueCount()
+    {
+        // Arrange
+        await queue.SendAsync("still here");
+
+        // Act
+        await service.PeekMessagesAsync(queue.Name, default);
+        var actual = await service.PeekMessagesAsync(queue.Name, default);
+
+        // Assert
+        var message = Assert.Single(actual);
+        Assert.Equal(0, message.DequeueCount);
+    }
+
+    [Fact]
+    public async Task PeekMessagesAsync_Message_HasInsertedAndExpiresOn()
+    {
+        // Arrange
+        await queue.SendAsync("with dates");
+
+        // Act
+        var actual = await service.PeekMessagesAsync(queue.Name, default);
+
+        // Assert
+        var message = Assert.Single(actual);
+        Assert.NotNull(message.InsertedOn);
+        Assert.NotNull(message.ExpiresOn);
+        Assert.True(message.ExpiresOn > message.InsertedOn);
+    }
+
+    [Fact]
+    public async Task PeekMessagesAsync_MoreThanTheMax_ReturnsOnlyTheMax()
+    {
+        // Arrange
+        for (var i = 0; i < QueueExplorerService.MaxPeekedMessages + 5; i++)
+            await queue.SendAsync($"message {i}");
+
+        // Act
+        var actual = await service.PeekMessagesAsync(queue.Name, default);
+
+        // Assert
+        Assert.Equal(QueueExplorerService.MaxPeekedMessages, actual.Count);
+    }
+
+    [Fact]
+    public async Task PeekMessagesAsync_MissingQueue_ThrowsQueueNotFound()
+    {
+        // Act
+        var actual = await Assert.ThrowsAsync<RequestFailedException>(() =>
+            service.PeekMessagesAsync("no-such-queue", default));
+
+        // Assert
+        Assert.Equal(404, actual.Status);
+        Assert.Equal("QueueNotFound", actual.ErrorCode);
+    }
+}

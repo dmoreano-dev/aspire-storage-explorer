@@ -87,7 +87,7 @@ public class LoopbackHostRewriterTests
         var rewritten = LoopbackHostRewriter.Rewrite("UseDevelopmentStorage=true");
 
         // Act
-        var actual = BlobClientFactory.TryCreate(rewritten, out _);
+        var actual = StorageClientFactory.TryCreateBlob(rewritten, out _);
 
         // Assert
         Assert.True(actual);

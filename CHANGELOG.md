@@ -6,6 +6,32 @@ the date when you tag.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-27
+
+### Added
+
+- Queues and Tables, read-only, behind a new **Blobs | Queues | Tables** switch above the container list (a service is
+  enabled only when the connected account has it).
+  - Queues: list queues with their message count; peek up to 32 messages, with a search box and Base64 messages
+    decoded automatically. Expand a message to see its full body, its exact dates, and **Copy body** / **Copy raw**.
+  - Tables: list tables; query entities with an OData filter and **Load more** paging. Columns are dynamic (the union
+    of the keys in the rows shown), typed, and a boolean shows as a colored chip.
+- `Sample.Seeder` now also seeds a few queues with messages and tables with entities.
+
+### Changed
+
+- `StorageExplorer.Web` reorganized by service (`Blobs/`, `Queues/`, `Tables/`); the blob API routes moved from
+  `/api/containers/...` to `/api/blobs/containers/...`. Internal only, nothing outside this repo depends on them.
+
+### Fixed
+
+- A storage error's detail showed the SDK's whole exception dump (status, error code, raw response, headers) instead
+  of just the message.
+- A few UI issues found while building the above: a "Querying…" label stuck after a failed table query, a message id
+  overflowing into the next column, and table column headers stacking in one column instead of sitting side by side.
+- The integration tests' Azurite fixture only built a blob endpoint, so a queue or table client reached out to real
+  Azure instead of the emulator.
+
 ## [0.4.1] - 2026-09-27
 
 ### Added

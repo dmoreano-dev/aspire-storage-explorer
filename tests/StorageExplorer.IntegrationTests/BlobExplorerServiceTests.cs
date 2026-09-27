@@ -1,5 +1,6 @@
 using Azure;
 using Azure.Storage.Blobs.Models;
+using StorageExplorer.Web.Blobs;
 
 namespace StorageExplorer.Web.IntegrationTests;
 

@@ -11,7 +11,8 @@ public static class StorageExplorerBuilderExtensions
     private const string EmulatorAccountKey = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==";
 
     /// <summary>
-    /// Adds a web UI to browse, download and delete the blobs of the given Azure Storage account (delete can be turned off).
+    /// Adds a web UI to browse the given Azure Storage account: blobs, with download and delete (delete can be turned
+    /// off), and queues and tables, read-only for now.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -22,9 +23,10 @@ public static class StorageExplorerBuilderExtensions
     /// replaces the emulator one.
     /// </para>
     /// <para>
-    /// Deleting is allowed on the emulator and on other local endpoints. An account that is not on this machine is
-    /// read-only, unless <paramref name="readOnly"/> says otherwise, or the user ticks <c>Allow changes</c> when
-    /// connecting to it from the page.
+    /// Deleting a blob is allowed on the emulator and on other local endpoints. An account that is not on this machine
+    /// is read-only, unless <paramref name="readOnly"/> says otherwise, or the user ticks <c>Allow changes</c> when
+    /// connecting to it from the page. Queues and tables have no destructive actions yet, so <paramref name="readOnly"/>
+    /// does not apply to them.
     /// </para>
     /// <para>
     /// The explorer is a development tool: it has no authentication and is not added when the

@@ -1,5 +1,8 @@
 using StorageExplorer.Web;
+using StorageExplorer.Web.Blobs;
 using StorageExplorer.Web.Endpoints;
+using StorageExplorer.Web.Queues;
+using StorageExplorer.Web.Tables;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,6 +43,8 @@ builder.Services
 builder.Services.AddSingleton<IContainerEnvironment, ContainerEnvironment>();
 builder.Services.AddSingleton<IStorageConnection, StorageConnection>();
 builder.Services.AddSingleton<IBlobExplorerService, BlobExplorerService>();
+builder.Services.AddSingleton<IQueueExplorerService, QueueExplorerService>();
+builder.Services.AddSingleton<ITableExplorerService, TableExplorerService>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<StorageExceptionHandler>();
@@ -49,10 +54,13 @@ var app = builder.Build();
 app.UseExceptionHandler();
 app.UseDefaultFiles();
 app.UseStaticFiles();
-app.MapExplorerEndpoints();
+app.MapConnectionEndpoints();
+app.MapBlobEndpoints();
+app.MapQueueEndpoints();
+app.MapTableEndpoints();
 
 app.Run();
 
 // An empty value is left to the [Required] attribute so it does not get two messages.
 static bool IsStorageConnectionString(string connectionString) =>
-    string.IsNullOrEmpty(connectionString) || BlobClientFactory.TryCreate(connectionString, out _);
+    string.IsNullOrEmpty(connectionString) || StorageClientFactory.TryCreateBlob(connectionString, out _);

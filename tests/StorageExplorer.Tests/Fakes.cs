@@ -1,10 +1,15 @@
+using Azure.Data.Tables;
 using Azure.Storage.Blobs;
+using Azure.Storage.Queues;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using StorageExplorer.Web.Blobs;
+using StorageExplorer.Web.Queues;
+using StorageExplorer.Web.Tables;
 
 namespace StorageExplorer.Web.Tests;
 
@@ -30,6 +35,15 @@ internal static class TestConnectionStrings
     public static readonly string DevInternal =
         $"DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey={EmulatorKey};" +
         "BlobEndpoint=http://storage.dev.internal:10000/devstoreaccount1;";
+
+    /// <summary>
+    /// A blob container SAS: no <c>AccountName</c>, so only the blob client can be built from it. This is the
+    /// connection string shape <see cref="ConnectionInfo.HasQueues"/> and <see cref="ConnectionInfo.HasTables"/> exist
+    /// for.
+    /// </summary>
+    public static readonly string BlobSasOnly =
+        "BlobEndpoint=https://acct.blob.example.invalid/;" +
+        "SharedAccessSignature=sv=2021-08-06&ss=b&srt=sco&sp=r&se=2100-01-01&st=2020-01-01&spr=https&sig=abc";
 }
 
 /// <summary>Says whether the explorer runs in a container, whatever the environment of the machine that runs the tests.</summary>
@@ -86,34 +100,40 @@ internal sealed class CollectingLoggerProvider : ILoggerProvider
 /// <summary>A connection that records what the endpoints ask of it and never touches the network.</summary>
 internal sealed class FakeStorageConnection : IStorageConnection
 {
-    public BlobServiceClient Client { get; } = BlobClientFactory.Create(TestConnectionStrings.Local);
+    public BlobServiceClient Blob { get; } = StorageClientFactory.CreateBlob(TestConnectionStrings.Local);
+
+    /// <summary><c>null</c> unless a test sets it, like a connection string with no queue endpoint.</summary>
+    public QueueServiceClient? Queue { get; set; }
+
+    /// <summary><c>null</c> unless a test sets it, like a connection string with no table endpoint.</summary>
+    public TableServiceClient? Table { get; set; }
 
     public ConnectionInfo Info { get; set; } = Local;
 
     /// <summary>When set, <see cref="UseAsync"/> throws it, like a connection that cannot be reached.</summary>
     public Exception? UseFails { get; set; }
 
-    public List<(BlobServiceClient Client, bool AllowWrites)> Used { get; } = [];
+    public List<(StorageClients Clients, bool AllowWrites)> Used { get; } = [];
 
     public int ResetCount { get; private set; }
 
     public static ConnectionInfo Local { get; } =
-        new("devstoreaccount1", "127.0.0.1:1", IsCustom: false, IsLocal: true, ReadOnly: false, ReadOnlyLocked: false);
+        new("devstoreaccount1", "127.0.0.1:1", IsCustom: false, IsLocal: true, ReadOnly: false, ReadOnlyLocked: false, HasQueues: false, HasTables: false);
 
     /// <summary>A remote account that the page could still allow writes on.</summary>
     public static ConnectionInfo RemoteReadOnly { get; } =
-        new("prodaccount", "prodaccount.blob.example.invalid", IsCustom: false, IsLocal: false, ReadOnly: true, ReadOnlyLocked: false);
+        new("prodaccount", "prodaccount.blob.example.invalid", IsCustom: false, IsLocal: false, ReadOnly: true, ReadOnlyLocked: false, HasQueues: false, HasTables: false);
 
     /// <summary>Locked by <c>readOnly: true</c> in the AppHost.</summary>
     public static ConnectionInfo Locked { get; } =
-        new("devstoreaccount1", "127.0.0.1:1", IsCustom: false, IsLocal: true, ReadOnly: true, ReadOnlyLocked: true);
+        new("devstoreaccount1", "127.0.0.1:1", IsCustom: false, IsLocal: true, ReadOnly: true, ReadOnlyLocked: true, HasQueues: false, HasTables: false);
 
-    public Task UseAsync(BlobServiceClient client, bool allowWrites, CancellationToken cancellationToken)
+    public Task UseAsync(StorageClients clients, bool allowWrites, CancellationToken cancellationToken)
     {
         if (UseFails is not null)
             throw UseFails;
 
-        Used.Add((client, allowWrites));
+        Used.Add((clients, allowWrites));
         return Task.CompletedTask;
     }
 
@@ -159,6 +179,58 @@ internal sealed class FakeBlobExplorerService : IBlobExplorerService
     }
 }
 
+/// <summary>An explorer service that returns what the test sets and records how it was called.</summary>
+internal sealed class FakeQueueExplorerService : IQueueExplorerService
+{
+    public List<string> Calls { get; } = [];
+
+    /// <summary>When set, every call throws it.</summary>
+    public Exception? Fails { get; set; }
+
+    public IReadOnlyList<QueueSummary> Queues { get; set; } = [];
+
+    public IReadOnlyList<QueueMessage> Messages { get; set; } = [];
+
+    public Task<IReadOnlyList<QueueSummary>> ListQueuesAsync(CancellationToken cancellationToken) =>
+        Record("queues", Queues);
+
+    public Task<IReadOnlyList<QueueMessage>> PeekMessagesAsync(string queue, CancellationToken cancellationToken) =>
+        Record($"messages:{queue}", Messages);
+
+    private Task<T> Record<T>(string call, T result)
+    {
+        Calls.Add(call);
+
+        return Fails is null ? Task.FromResult(result) : Task.FromException<T>(Fails);
+    }
+}
+
+/// <summary>An explorer service that returns what the test sets and records how it was called.</summary>
+internal sealed class FakeTableExplorerService : ITableExplorerService
+{
+    public List<string> Calls { get; } = [];
+
+    /// <summary>When set, every call throws it.</summary>
+    public Exception? Fails { get; set; }
+
+    public IReadOnlyList<TableSummary> Tables { get; set; } = [];
+
+    public EntityPage Page { get; set; } = new([], [], null);
+
+    public Task<IReadOnlyList<TableSummary>> ListTablesAsync(CancellationToken cancellationToken) =>
+        Record("tables", Tables);
+
+    public Task<EntityPage> QueryEntitiesAsync(string table, string? filter, string? continuationToken, CancellationToken cancellationToken) =>
+        Record($"entities:{table}:{filter}:{continuationToken}", Page);
+
+    private Task<T> Record<T>(string call, T result)
+    {
+        Calls.Add(call);
+
+        return Fails is null ? Task.FromResult(result) : Task.FromException<T>(Fails);
+    }
+}
+
 /// <summary>
 /// The whole web app in memory, with the storage side replaced by fakes, so the routes, the filters and the error
 /// handling run for real without an account.
@@ -192,8 +264,12 @@ internal sealed class ApiHost : IDisposable
             {
                 services.RemoveAll<IStorageConnection>();
                 services.RemoveAll<IBlobExplorerService>();
+                services.RemoveAll<IQueueExplorerService>();
+                services.RemoveAll<ITableExplorerService>();
                 services.AddSingleton<IStorageConnection>(Connection);
                 services.AddSingleton<IBlobExplorerService>(Explorer);
+                services.AddSingleton<IQueueExplorerService>(Queues);
+                services.AddSingleton<ITableExplorerService>(Tables);
             });
 
             configure?.Invoke(builder);
@@ -205,6 +281,10 @@ internal sealed class ApiHost : IDisposable
     public FakeStorageConnection Connection { get; }
 
     public FakeBlobExplorerService Explorer { get; } = new();
+
+    public FakeQueueExplorerService Queues { get; } = new();
+
+    public FakeTableExplorerService Tables { get; } = new();
 
     public HttpClient Client { get; }
 

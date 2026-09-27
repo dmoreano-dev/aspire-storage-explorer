@@ -39,21 +39,21 @@
     </header>
 
     <div class="layout">
-      <nav class="sidebar" aria-label="Containers">
+      <nav id="sidebar-nav" class="sidebar" aria-label="Containers">
         <div class="service-switch" role="group" aria-label="Storage service">
-          <button type="button" aria-pressed="true"><i data-icon="container"></i>Blobs</button>
-          <button type="button" aria-disabled="true" title="Queues are not supported yet"><i data-icon="layers"></i>Queues</button>
-          <button type="button" aria-disabled="true" title="Tables are not supported yet"><i data-icon="table"></i>Tables</button>
+          <button type="button" data-service="blobs" aria-pressed="true"><i data-icon="container"></i>Blobs</button>
+          <button type="button" data-service="queues" aria-disabled="true"><i data-icon="layers"></i>Queues</button>
+          <button type="button" data-service="tables" aria-disabled="true"><i data-icon="table"></i>Tables</button>
         </div>
 
         <div class="list-heading">
-          <h2>Containers</h2>
+          <h2 id="list-title">Containers</h2>
           <span id="container-count" class="count"></span>
         </div>
         <div id="container-filter-field" class="search-field" hidden>
           <i data-icon="search"></i>
           <input id="container-filter" type="search" placeholder="Search containers" aria-label="Search containers" autocomplete="off" spellcheck="false">
-          <kbd title="Press / to search containers">/</kbd>
+          <kbd id="filter-shortcut-hint" title="Press / to search containers">/</kbd>
         </div>
         <ul id="containers"></ul>
       </nav>
@@ -76,6 +76,22 @@
           <span id="filter-count" class="filter-count" role="status"></span>
         </div>
 
+        <form id="table-toolbar" class="table-toolbar" hidden>
+          <label for="table-filter">Filter <span class="hint-inline">(OData)</span></label>
+          <div class="odata-field">
+            <input id="table-filter" type="text" autocomplete="off" spellcheck="false">
+            <button type="submit" class="run-button">
+              <i data-icon="play"></i>
+              Run
+            </button>
+            <button id="table-filter-clear" type="button" class="outlined-button">Clear</button>
+          </div>
+          <p class="hint">
+            Example: <code>Country eq 'ES' and Total ge 100</code>. Leave it empty to list everything.
+          </p>
+          <span id="table-filter-count" class="filter-count" role="status"></span>
+        </form>
+
         <p id="message" class="message" hidden></p>
 
         <div id="listing" class="listing" hidden>
@@ -91,6 +107,47 @@
             </thead>
             <tbody></tbody>
           </table>
+        </div>
+
+        <div id="queue-toolbar" class="toolbar" hidden>
+          <div class="search-field wide">
+            <i data-icon="search"></i>
+            <input id="queue-filter" type="search" placeholder="Search the peeked messages" aria-label="Search the peeked messages" autocomplete="off" spellcheck="false">
+          </div>
+          <span id="queue-filter-count" class="filter-count" role="status"></span>
+        </div>
+
+        <div id="queue-note" class="note" hidden>
+          <i data-icon="info"></i>
+          <span>Peeking does not change the queue. Receiving hides a message for a while and raises its dequeue count, so this explorer does not do it.</span>
+        </div>
+
+        <div id="queue-listing" class="listing" hidden>
+          <table id="messages">
+            <thead>
+              <tr>
+                <th class="col-index num">#</th>
+                <th class="col-message-id">Message ID</th>
+                <th class="col-message-text">Text</th>
+                <th class="col-inserted">Inserted</th>
+                <th class="col-expires">Expires</th>
+                <th class="col-dequeue num">Dequeues</th>
+                <th class="col-expand"><span class="sr-only">Details</span></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div id="table-listing" class="listing" hidden>
+          <table id="entities">
+            <thead><tr></tr></thead>
+            <tbody></tbody>
+          </table>
+          <div id="load-more-bar" class="load-more" hidden>
+            <span id="load-more-summary"></span>
+            <button id="load-more" type="button" class="outlined-button" hidden>Load more</button>
+          </div>
         </div>
       </main>
     </div>

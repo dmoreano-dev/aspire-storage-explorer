@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using StorageExplorer.Web.Blobs;
 
 namespace StorageExplorer.Web.Tests;
 
@@ -13,7 +14,7 @@ namespace StorageExplorer.Web.Tests;
 /// </summary>
 public class GuardTests
 {
-    private const string DeleteBlobUri = "/api/containers/photos/blob?path=cat.png";
+    private const string DeleteBlobUri = "/api/blobs/containers/photos/blob?path=cat.png";
 
     [Fact]
     public async Task DeleteBlob_WithoutExplorerHeader_ReturnsBadRequestAndDeletesNothing()
@@ -87,7 +88,7 @@ public class GuardTests
     {
         // Arrange
         using var host = new ApiHost();
-        var request = host.Request(HttpMethod.Get, "/api/containers", explorerHeader: false, origin: "http://evil.example");
+        var request = host.Request(HttpMethod.Get, "/api/blobs/containers", explorerHeader: false, origin: "http://evil.example");
 
         // Act
         var response = await host.Client.SendAsync(request);
@@ -169,7 +170,7 @@ public class GuardTests
         host.Explorer.Download = new BlobDownload(new MemoryStream([1, 2, 3]), "image/png", "cat.png");
 
         // Act
-        var response = await host.Client.GetAsync("/api/containers/photos/blob?path=cat.png");
+        var response = await host.Client.GetAsync("/api/blobs/containers/photos/blob?path=cat.png");
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -201,8 +202,8 @@ public class GuardTests
         // Adding an endpoint that changes data is a decision to review, so it has to be added here on purpose.
         Assert.Equal(
             [
+                "DELETE /api/blobs/containers/x/blob",
                 "DELETE /api/connection",
-                "DELETE /api/containers/x/blob",
                 "PUT /api/connection",
             ],
             actual);

@@ -1,4 +1,5 @@
 using Azure.Storage.Blobs;
+using StorageExplorer.Web.Blobs;
 
 namespace StorageExplorer.Web.Tests;
 
@@ -59,7 +60,7 @@ public class BlobAddressTests
     public void GetBlobClient_EmulatorEndpoint_AddressesBlobBelowAccountAndContainer(string hostAndPort, string path)
     {
         // Arrange
-        var service = BlobClientFactory.Create(Emulator(hostAndPort));
+        var service = StorageClientFactory.CreateBlob(Emulator(hostAndPort));
 
         // Act
         var actual = BlobExplorerService.GetBlobClient(service, Container, path);
@@ -75,7 +76,7 @@ public class BlobAddressTests
     public void GetBlobClient_AccountWithOwnHost_AddressesBlobBelowContainer(string path)
     {
         // Arrange
-        var service = BlobClientFactory.Create(Azure);
+        var service = StorageClientFactory.CreateBlob(Azure);
 
         // Act
         var actual = BlobExplorerService.GetBlobClient(service, Container, path);
@@ -90,7 +91,7 @@ public class BlobAddressTests
     public void GetBlobClient_EmulatorEndpoint_KeepsConnectionCredentials(string hostAndPort)
     {
         // Arrange
-        var service = BlobClientFactory.Create(Emulator(hostAndPort));
+        var service = StorageClientFactory.CreateBlob(Emulator(hostAndPort));
         var container = service.GetBlobContainerClient(Container);
 
         // Act
@@ -110,7 +111,7 @@ public class BlobAddressTests
     public void GetBlobClient_NameTheAddressCannotCarry_FallsBackToSdkAnswer(string path)
     {
         // Arrange
-        var service = BlobClientFactory.Create(Emulator("localhost:33113"));
+        var service = StorageClientFactory.CreateBlob(Emulator("localhost:33113"));
 
         // Act
         var actual = BlobExplorerService.GetBlobClient(service, Container, path);

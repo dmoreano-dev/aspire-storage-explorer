@@ -2,7 +2,7 @@ using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 
-namespace StorageExplorer.Web;
+namespace StorageExplorer.Web.Blobs;
 
 internal interface IBlobExplorerService
 {
@@ -39,7 +39,7 @@ internal sealed class BlobExplorerService(IStorageConnection connection) : IBlob
     {
         var containers = new List<ContainerSummary>();
 
-        await foreach (var container in connection.Client.GetBlobContainersAsync(cancellationToken: cancellationToken))
+        await foreach (var container in connection.Blob.GetBlobContainersAsync(cancellationToken: cancellationToken))
             containers.Add(new ContainerSummary(container.Name, container.Properties.LastModified));
 
         return containers;
@@ -47,7 +47,7 @@ internal sealed class BlobExplorerService(IStorageConnection connection) : IBlob
 
     public async Task<EntryListing> ListEntriesAsync(string container, string? prefix, CancellationToken cancellationToken)
     {
-        var containerClient = connection.Client.GetBlobContainerClient(container);
+        var containerClient = connection.Blob.GetBlobContainerClient(container);
         var folders = new List<ExplorerEntry>();
         var files = new List<ExplorerEntry>();
         var truncated = false;
@@ -86,7 +86,7 @@ internal sealed class BlobExplorerService(IStorageConnection connection) : IBlob
 
     public async Task<EntryListing> SearchAsync(string container, string? prefix, string term, CancellationToken cancellationToken)
     {
-        var containerClient = connection.Client.GetBlobContainerClient(container);
+        var containerClient = connection.Blob.GetBlobContainerClient(container);
         var normalizedPrefix = NormalizePrefix(prefix);
         var prefixLength = normalizedPrefix?.Length ?? 0;
         var matches = new List<ExplorerEntry>();
@@ -131,7 +131,7 @@ internal sealed class BlobExplorerService(IStorageConnection connection) : IBlob
 
     public async Task<BlobDownload?> DownloadAsync(string container, string path, CancellationToken cancellationToken)
     {
-        var blobClient = GetBlobClient(connection.Client, container, path);
+        var blobClient = GetBlobClient(connection.Blob, container, path);
 
         try
         {
@@ -151,7 +151,7 @@ internal sealed class BlobExplorerService(IStorageConnection connection) : IBlob
 
     public async Task<bool> DeleteAsync(string container, string path, CancellationToken cancellationToken)
     {
-        var blobClient = GetBlobClient(connection.Client, container, path);
+        var blobClient = GetBlobClient(connection.Blob, container, path);
         var response = await blobClient.DeleteIfExistsAsync(DeleteSnapshotsOption.IncludeSnapshots, cancellationToken: cancellationToken);
 
         return response.Value;
