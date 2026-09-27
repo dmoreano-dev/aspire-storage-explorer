@@ -5,7 +5,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
 
     <PackageId>StorageExplorer.Aspire.Hosting</PackageId>
-    <Version>0.4.0</Version>
+    <Version>0.4.1</Version>
     <Description>Aspire hosting integration that adds a web-based Azure Storage blob explorer to the AppHost.</Description>
     <PackageTags>aspire integration hosting azure storage blob explorer azurite</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -23,6 +23,13 @@
 
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="13.1.0" />
+    <!--
+      Direct override, not a stray reference: 13.1.0 pulls MessagePack 2.5.192 through StreamJsonRpc, which trips
+      NU1902/NU1903. Raising Aspire.Hosting.Azure.Storage instead (13.2.0+) fixes that but hangs
+      DistributedApplication.CreateBuilder().Build() forever on dispose when the app is never Run() - the pattern
+      WithStorageExplorerTests uses. See CHANGELOG.md [Unreleased] before touching either version.
+    -->
+    <PackageReference Include="MessagePack" Version="2.5.302" />
   </ItemGroup>
 
   <ItemGroup>
