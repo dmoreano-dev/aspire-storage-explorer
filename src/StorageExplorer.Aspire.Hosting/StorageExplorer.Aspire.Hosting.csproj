@@ -5,7 +5,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
 
     <PackageId>StorageExplorer.Aspire.Hosting</PackageId>
-    <Version>0.5.0</Version>
+    <Version>0.6.0</Version>
     <Description>Aspire hosting integration that adds a web-based Azure Storage explorer (blobs, queues and tables) to the AppHost.</Description>
     <PackageTags>aspire integration hosting azure storage blob queue table explorer azurite</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

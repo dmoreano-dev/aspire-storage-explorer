@@ -113,9 +113,16 @@ let activeTable = null;
 let tableRows = [];
 let tableColumns = [];
 let tableContinuationToken = null;
+// Whether "Load more" has appended a further page since the last fresh query: while true, polling leaves the table
+// alone rather than throwing that state away with a first-page-only refresh.
+let tableLoadedMore = false;
 
 // Wait for a pause in typing before searching, since every search reads the listing from the account.
 const SEARCH_DELAY_MS = 250;
+
+// How often a background poll asks the active view's data again, to notice a write made from outside this tab (the
+// CLI, Azure Storage Explorer, another process). See the "Auto-refresh" section below.
+const POLL_INTERVAL_MS = 8_000;
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 const sortValues = {
@@ -463,6 +470,7 @@ function clearEntities() {
   tableRows = [];
   tableColumns = [];
   tableContinuationToken = null;
+  tableLoadedMore = false;
   els.tableListing.hidden = true;
   els.loadMoreBar.hidden = true;
   els.itemCount.textContent = '';
@@ -821,10 +829,13 @@ function renderMessageDetailRow(message, expanded) {
   const copyBody = el('button', 'primary-button', 'Copy body');
   copyBody.type = 'button';
   copyBody.addEventListener('click', () => copyToClipboard(message.text, 'Body'));
+  const copyMessageId = el('button', 'outlined-button', 'Copy Message Id');
+  copyMessageId.type = 'button';
+  copyMessageId.addEventListener('click', () => copyToClipboard(message.messageId, 'Message Id'));
   const copyRaw = el('button', 'outlined-button', 'Copy raw');
   copyRaw.type = 'button';
   copyRaw.addEventListener('click', () => copyToClipboard(message.rawText, 'Raw text'));
-  actions.append(copyBody, copyRaw);
+  actions.append(copyBody, copyMessageId, copyRaw);
 
   const facts = el('dl', 'message-detail-facts');
   const addFact = (term, value) => facts.append(el('dt', undefined, term), el('dd', undefined, value));
@@ -902,6 +913,7 @@ async function loadMoreEntities() {
     tableColumns = mergeColumns(tableColumns, page.columns);
     tableRows = [...tableRows, ...page.entities];
     tableContinuationToken = page.continuationToken;
+    tableLoadedMore = true;
     renderEntitiesTable();
   } catch (error) {
     if (token !== renderToken) return;
@@ -1138,6 +1150,103 @@ async function refresh() {
   await render();
 }
 
+// --- Auto-refresh ----------------------------------------------------------------
+// Azure Storage (and Azurite) has no push notification this tool can subscribe to, so noticing a write made from
+// outside this tab — the CLI, Azure Storage Explorer, another process — means asking again. Polling stays scoped to
+// what is actually on screen (the sidebar list for the active service, and the listing/peek/query the active item
+// shows), pauses while the tab is hidden, and skips re-rendering when the answer did not change, so a quiet account
+// never disturbs scroll position or an expanded row just because a timer fired.
+
+let pollTimer = null;
+
+function startPolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(poll, POLL_INTERVAL_MS);
+}
+
+function stopPolling() {
+  clearInterval(pollTimer);
+  pollTimer = null;
+}
+
+async function poll() {
+  if (document.hidden) return;
+
+  try {
+    if (service === 'queues') await pollQueues();
+    else if (service === 'tables') await pollTables();
+    else await pollBlobs();
+  } catch {
+    // Silent: the next tick, or the refresh button, tries again. Surfacing a timer's own failure would be noise for
+    // something the user never asked for.
+  }
+}
+
+const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+async function pollBlobs() {
+  const token = renderToken;
+
+  const freshContainers = await getJson(`${API}/blobs/containers`);
+  if (token !== renderToken) return;
+  if (!sameJson(freshContainers, containers)) {
+    containers = freshContainers;
+    renderSidebarList(listed?.container ?? null);
+  }
+
+  if (!listed) return;
+  const { container, prefix } = listed;
+  const listing = await getJson(`${containerUrl(container)}/entries?prefix=${encodeURIComponent(prefix)}`);
+  if (token !== renderToken || sameJson(listing, listed.listing)) return;
+
+  listed = { container, prefix, listing };
+  // Same as a manual refresh: a search in flight is about a listing that just changed under it.
+  if (currentTerm()) await search();
+  else { found = null; renderEntries(); }
+}
+
+async function pollQueues() {
+  const token = renderToken;
+
+  const freshQueues = connection?.hasQueues ? await getJson(queuesUrl) : [];
+  if (token !== renderToken) return;
+  if (!sameJson(freshQueues, queues)) {
+    queues = freshQueues;
+    renderSidebarList(activeQueue);
+  }
+
+  if (!activeQueue) return;
+  const messages = await getJson(queueMessagesUrl(activeQueue));
+  if (token !== renderToken || sameJson(messages, queueMessages)) return;
+
+  queueMessages = messages;
+  renderQueueMessages();
+}
+
+async function pollTables() {
+  const token = renderToken;
+
+  const freshTables = connection?.hasTables ? await getJson(tablesUrl) : [];
+  if (token !== renderToken) return;
+  if (!sameJson(freshTables, tables)) {
+    tables = freshTables;
+    renderSidebarList(activeTable);
+  }
+
+  // A page appended by "Load more" carries state (the continuation token, the rows loaded so far) that a first-page
+  // query would throw away, so polling leaves it alone here; the refresh button still re-queries from the start.
+  if (!activeTable || tableLoadedMore) return;
+
+  const page = await getJson(tableEntitiesUrl(activeTable, tableFilterTerm(), null));
+  if (token !== renderToken || tableLoadedMore) return;
+  if (sameJson(page.columns, tableColumns) && sameJson(page.entities, tableRows)) return;
+
+  tableColumns = page.columns;
+  tableRows = page.entities;
+  tableContinuationToken = page.continuationToken;
+  renderEntitiesTable();
+}
+
 els.confirmCancel.addEventListener('click', () => els.confirmDialog.close('cancel'));
 els.confirmName.addEventListener('input', () => {
   els.confirmSubmit.disabled = els.confirmName.value !== requiredName;
@@ -1323,6 +1432,14 @@ els.loadMore.addEventListener('click', loadMoreEntities);
 
 els.refresh.addEventListener('click', refresh);
 window.addEventListener('hashchange', render);
+
+// Polling pauses the moment the tab is hidden and catches up with an immediate poll
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopPolling();
+  else { poll(); startPolling(); }
+});
+if (!document.hidden) startPolling();
+
 renderScope();
 renderTheme();
 refresh();

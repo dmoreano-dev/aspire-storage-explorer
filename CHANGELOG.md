@@ -6,6 +6,23 @@ the date when you tag.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-27
+
+### Added
+
+- Blobs, Queues and Tables refresh themselves in the background instead of needing the Refresh button for a write
+  made from outside the tool (the CLI, Azure Storage Explorer, another process, or a teammate on a shared account).
+  Azure Storage (and Azurite) has no push notification to subscribe to, so this polls instead: it stays scoped to
+  whatever is on screen (the sidebar list for the active service, and the listing, peek or query the active item
+  shows), asks again every 8 seconds, pauses the moment the tab is hidden and catches up as soon as it is visible
+  again. A table with rows loaded past the first page via **Load more** is left alone by it, so that state is not
+  thrown away by a timer.
+- **Copy Message Id** next to **Copy body** / **Copy raw** on an expanded queue message.
+
+### Changed
+
+- More space below the "peeking does not change the queue" note banner.
+
 ## [0.5.0] - 2026-09-27
 
 ### Added
