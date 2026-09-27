@@ -201,6 +201,15 @@ public class StartupTests
         Assert.IsType<ContainerEnvironment>(actual);
     }
 
+    /// <summary>
+    /// <see cref="WebApplicationFactory{TEntryPoint}.CreateClient()"/> is racy when startup fails through
+    /// <c>ValidateOnStart()</c>: <c>DeferredHost.StartAsync</c> disposes its service provider in a <c>finally</c>
+    /// block on the host's own thread while this thread is still reading a service from it to build the test server,
+    /// which occasionally throws <see cref="ObjectDisposedException"/> instead of surfacing the
+    /// <see cref="OptionsValidationException"/> the failed validation actually raised. This is a known issue in
+    /// <c>Microsoft.AspNetCore.Mvc.Testing</c> itself (see <see href="https://github.com/dotnet/aspnetcore/issues/58442"/>) 
+    /// a fresh factory gets a few more tries at the non-raced path before this gives up and lets the exception through for real.
+    /// </summary>
     private static async Task<OptionsValidationException> ExpectValidationFailureAsync(
         Func<WebApplicationFactory<Program>> createFactory)
     {
