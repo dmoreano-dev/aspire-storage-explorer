@@ -10,6 +10,16 @@ the date when you tag.
 
 - Screenshots in the README (`assets/screenshots`).
 
+### Changed
+
+- Pinned a direct `MessagePack` 2.5.302 reference in `StorageExplorer.Aspire.Hosting`, overriding the 2.5.192 that
+  `Aspire.Hosting.Azure.Storage` 13.1.0 brings in through `StreamJsonRpc` and clearing the `NU1902`/`NU1903` advisories.
+  `Aspire.Hosting.Azure.Storage` itself stays at 13.1.0: every version from 13.2.0 to 13.5.4 (the latest) makes
+  `DistributedApplication.CreateBuilder().Build()` hang forever on dispose when the app is never `Run()` — exactly the
+  pattern `WithStorageExplorerTests` uses to read what `WithStorageExplorer()` adds without starting a container.
+  Bisected with `--blame-hang-timeout`; 13.1.3 is the last good version, 13.2.0 the first bad one. Filed as a
+  candidate upstream bug; revisit the floor once it is fixed there.
+
 ### Fixed
 
 - Download and delete failed for a blob that existed, and deleted nothing, when the emulator was reached by a name
