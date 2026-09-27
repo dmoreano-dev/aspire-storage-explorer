@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Diagnostics;
 namespace StorageExplorer.Web;
 
 /// <summary>Turns storage failures (missing container, bad request, ...) into problem details responses.</summary>
-internal sealed class StorageExceptionHandler(IProblemDetailsService problemDetailsService) : IExceptionHandler
+internal sealed class StorageExceptionHandler(IProblemDetailsService problemDetailsService, IContainerEnvironment container) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
@@ -38,7 +38,7 @@ internal sealed class StorageExceptionHandler(IProblemDetailsService problemDeta
         });
     }
 
-    private static string Describe(RequestFailedException exception)
+    private string Describe(RequestFailedException exception)
     {
         if (exception.ErrorCode is { Length: > 0 } code)
             return $"{code}: {exception.Message}";
@@ -47,7 +47,7 @@ internal sealed class StorageExceptionHandler(IProblemDetailsService problemDeta
         if (exception.Status != 0)
             return exception.Message;
 
-        return LoopbackHostRewriter.RunningInContainer
+        return container.RunningInContainer
             ? $"{exception.Message}. Check that the service is running and listening on that port; from this container, " +
               $"localhost and 127.0.0.1 are reached through {LoopbackHostRewriter.HostGateway}."
             : $"{exception.Message}. Check that the service is running and listening on that port.";

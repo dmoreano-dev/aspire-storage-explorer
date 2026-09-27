@@ -9,9 +9,9 @@ var rewriteLogged = false;
 builder.Services
     .AddOptions<StorageExplorerOptions>()
     .BindConfiguration(StorageExplorerOptions.SectionName)
-    .PostConfigure<ILoggerFactory>((options, loggerFactory) =>
+    .PostConfigure<ILoggerFactory, IContainerEnvironment>((options, loggerFactory, container) =>
     {
-        if (!LoopbackHostRewriter.RunningInContainer)
+        if (!container.RunningInContainer)
             return;
 
         var rewritten = LoopbackHostRewriter.Rewrite(options.ConnectionString);
@@ -37,6 +37,7 @@ builder.Services
         "A bare service URI is not supported yet.")
     .ValidateOnStart();
 
+builder.Services.AddSingleton<IContainerEnvironment, ContainerEnvironment>();
 builder.Services.AddSingleton<IStorageConnection, StorageConnection>();
 builder.Services.AddSingleton<IBlobExplorerService, BlobExplorerService>();
 

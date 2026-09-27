@@ -24,10 +24,6 @@ internal static partial class LoopbackHostRewriter
         $"QueueEndpoint=http://{HostGateway}:10001/devstoreaccount1;" +
         $"TableEndpoint=http://{HostGateway}:10002/devstoreaccount1;";
 
-    /// <summary>The .NET container images set this variable; outside a container the loopback host is the real machine.</summary>
-    public static bool RunningInContainer =>
-        string.Equals(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"), "true", StringComparison.OrdinalIgnoreCase);
-
     public static string Rewrite(string connectionString)
     {
         if (string.IsNullOrEmpty(connectionString))

@@ -147,6 +147,16 @@ first; it gets the same tag the extension uses, so the sample runs it:
 | `src/StorageExplorer.Aspire.Hosting` | The Aspire extension, packed as the NuGet package `StorageExplorer.Aspire.Hosting` |
 | `samples/Sample.AppHost` | Aspire app that uses the extension |
 | `samples/Sample.Seeder` | Fills the emulator with sample blobs |
+| `tests/StorageExplorer.Tests` | Unit tests, and tests of the web app with the storage replaced. No Docker needed |
+| `tests/StorageExplorer.IntegrationTests` | The web app against a real Azurite that Aspire starts. Needs Docker |
+| `tests/StorageExplorer.TestAppHost` | The Aspire app the integration tests start: only Azurite |
+
+Run the tests with:
+
+```sh
+dotnet test tests/StorageExplorer.Tests
+dotnet test tests/StorageExplorer.IntegrationTests   # needs Docker
+```
 
 ## License
 

@@ -21,6 +21,10 @@ jobs:
       - name: Build
         run: dotnet build StorageExplorer.slnx --configuration Release -p:ContinuousIntegrationBuild=true
 
+      # The unit tests and the tests of the web app with the storage replaced. They need no Docker.
+      - name: Test
+        run: dotnet test tests/StorageExplorer.Tests --configuration Release --no-build
+
       - name: Pack
         run: dotnet pack src/StorageExplorer.Aspire.Hosting --configuration Release --no-build --output artifacts
 
@@ -29,6 +33,20 @@ jobs:
           name: package
           path: artifacts/*
           if-no-files-found: error
+
+  # Its own job: it starts Azurite in a container (the runner has Docker), which takes longer than the rest.
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Integration tests
+        run: dotnet test tests/StorageExplorer.IntegrationTests --configuration Release
 
   image:
     needs: build

@@ -10,6 +10,14 @@ the date when you tag.
 
 - Screenshots in the README (`assets/screenshots`).
 
+### Fixed
+
+- Download and delete failed for a blob that existed, and deleted nothing, when the emulator was reached by a name
+  (`localhost`, `host.docker.internal`) on a port other than 10000 to 10002: "not found" for a blob in a folder and "bad
+  request" for one at the root of the container. It happened, for example, with an Azurite on a custom port added in
+  **Change connection**. Listing was not affected. The Azure SDK took the account in the address for the container, so
+  it built the address of the blob without its container.
+
 ## [0.4.0] - 2026-09-26
 
 ### Added

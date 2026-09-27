@@ -131,7 +131,7 @@ internal sealed class BlobExplorerService(IStorageConnection connection) : IBlob
 
     public async Task<BlobDownload?> DownloadAsync(string container, string path, CancellationToken cancellationToken)
     {
-        var blobClient = connection.Client.GetBlobContainerClient(container).GetBlobClient(path);
+        var blobClient = GetBlobClient(connection.Client, container, path);
 
         try
         {
@@ -151,11 +151,43 @@ internal sealed class BlobExplorerService(IStorageConnection connection) : IBlob
 
     public async Task<bool> DeleteAsync(string container, string path, CancellationToken cancellationToken)
     {
-        var blobClient = connection.Client.GetBlobContainerClient(container).GetBlobClient(path);
+        var blobClient = GetBlobClient(connection.Client, container, path);
         var response = await blobClient.DeleteIfExistsAsync(DeleteSnapshotsOption.IncludeSnapshots, cancellationToken: cancellationToken);
 
         return response.Value;
     }
+
+    /// <summary>
+    /// The client of a blob. <c>GetBlobContainerClient(container).GetBlobClient(path)</c> is not enough on its own: the
+    /// SDK reads an emulator address (<c>host/account/container/blob</c>) as such only when the host is an IPv4 address or
+    /// the port is one of the emulator's (10000 to 10002). With anything else, for example <c>localhost</c> and the random
+    /// port Aspire gives Azurite, it takes the account for the container, and the address it builds for the blob has no
+    /// container in it: the blob is looked for in the wrong place, and download and delete fail for a blob that exists
+    /// (not found when it is in a folder, and bad request when it is at the root, as its name is taken for a container).
+    /// </summary>
+    /// <remarks>
+    /// That happens because the SDK builds the address by replacing what it took for the blob name, so giving it the
+    /// container and the path together puts the container back. This is done only when the first address is not the
+    /// container followed by the path, and only kept when the second one is. Otherwise, the SDK's own answer is used,
+    /// as before.
+    /// </remarks>
+    internal static BlobClient GetBlobClient(BlobServiceClient service, string container, string path)
+    {
+        var containerClient = service.GetBlobContainerClient(container);
+        var blob = containerClient.GetBlobClient(path);
+
+        if (IsBlobOf(containerClient, blob, path))
+            return blob;
+
+        var withContainer = containerClient.GetBlobClient($"{container}{Delimiter}{path}");
+
+        return IsBlobOf(containerClient, withContainer, path) ? withContainer : blob;
+    }
+
+    // The whole path has to match and not only its start: a blob called "photos/x" in the container "photos" would pass
+    // for the blob "x" that the container "photos" holds.
+    private static bool IsBlobOf(BlobContainerClient container, BlobClient blob, string path) =>
+        Uri.UnescapeDataString(blob.Uri.AbsolutePath) == Uri.UnescapeDataString(container.Uri.AbsolutePath) + Delimiter + path;
 
     private static string? NormalizePrefix(string? prefix) =>
         string.IsNullOrEmpty(prefix) || prefix.EndsWith(Delimiter, StringComparison.Ordinal)

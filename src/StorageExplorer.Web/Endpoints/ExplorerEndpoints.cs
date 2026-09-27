@@ -16,6 +16,7 @@ internal static class ExplorerEndpoints
         api.MapPut("/connection", async (
                 SetConnectionRequest request,
                 IStorageConnection connection,
+                IContainerEnvironment container,
                 CancellationToken cancellationToken) =>
             {
                 var value = request.ConnectionString?.Trim();
@@ -23,7 +24,7 @@ internal static class ExplorerEndpoints
                 if (string.IsNullOrEmpty(value) || value.Length > MaxConnectionStringLength)
                     return InvalidConnectionString();
 
-                if (LoopbackHostRewriter.RunningInContainer)
+                if (container.RunningInContainer)
                     value = LoopbackHostRewriter.Rewrite(value);
 
                 if (!BlobClientFactory.TryCreate(value, out var client))

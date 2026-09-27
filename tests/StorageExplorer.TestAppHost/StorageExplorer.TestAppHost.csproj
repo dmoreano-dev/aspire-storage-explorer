@@ -1,0 +1,13 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.5.4">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Same version as the SDK above: Aspire packages of different versions do not work together. -->
+    <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="13.5.4" />
+  </ItemGroup>
+
+</Project>

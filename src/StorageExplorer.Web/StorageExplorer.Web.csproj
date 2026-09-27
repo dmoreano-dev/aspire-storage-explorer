@@ -8,4 +8,9 @@
     <PackageReference Include="Azure.Storage.Blobs" Version="12.29.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="StorageExplorer.Tests" />
+    <InternalsVisibleTo Include="StorageExplorer.IntegrationTests" />
+  </ItemGroup>
+
 </Project>
