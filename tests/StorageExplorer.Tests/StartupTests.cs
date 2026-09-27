@@ -63,11 +63,8 @@ public class StartupTests
     [Fact]
     public async Task Startup_MissingConnectionString_Fails()
     {
-        // Arrange
-        await using var factory = Start(connectionString: null);
-
         // Act
-        var actual = Assert.Throws<OptionsValidationException>(() => factory.CreateClient());
+        var actual = await ExpectValidationFailureAsync(() => Start(connectionString: null));
 
         // Assert
         Assert.Contains("ConnectionString", actual.Message);
@@ -79,11 +76,8 @@ public class StartupTests
     [InlineData("AccountName=onlyaname")]
     public async Task Startup_InvalidConnectionString_Fails(string value)
     {
-        // Arrange
-        await using var factory = Start(value);
-
         // Act
-        var actual = Assert.Throws<OptionsValidationException>(() => factory.CreateClient());
+        var actual = await ExpectValidationFailureAsync(() => Start(value));
 
         // Assert
         Assert.Contains("must be a storage account connection string", actual.Message);
@@ -92,11 +86,8 @@ public class StartupTests
     [Fact]
     public async Task Startup_InvalidConnectionString_DoesNotRepeatItInTheError()
     {
-        // Arrange
-        await using var factory = Start("AccountName=x;AccountKey=SUPER-SECRET-KEY;Nonsense=1");
-
         // Act
-        var actual = Assert.Throws<OptionsValidationException>(() => factory.CreateClient());
+        var actual = await ExpectValidationFailureAsync(() => Start("AccountName=x;AccountKey=SUPER-SECRET-KEY;Nonsense=1"));
 
         // Assert
         Assert.DoesNotContain("SUPER-SECRET-KEY", actual.ToString());
@@ -208,6 +199,23 @@ public class StartupTests
 
         // Assert
         Assert.IsType<ContainerEnvironment>(actual);
+    }
+
+    private static async Task<OptionsValidationException> ExpectValidationFailureAsync(
+        Func<WebApplicationFactory<Program>> createFactory)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            await using var factory = createFactory();
+
+            try
+            {
+                return Assert.Throws<OptionsValidationException>(() => factory.CreateClient());
+            }
+            catch (ObjectDisposedException) when (attempt < 5)
+            {
+            }
+        }
     }
 
     /// <param name="connectionString">The setting the AppHost gives, or <c>null</c> for none.</param>
