@@ -72,6 +72,12 @@ const els = {
   connectionReset: document.getElementById('connection-reset'),
   connectionCancel: document.getElementById('connection-cancel'),
   connectionSubmit: document.getElementById('connection-submit'),
+  previewDialog: document.getElementById('preview-dialog'),
+  previewTitle: document.getElementById('preview-title'),
+  previewMeta: document.getElementById('preview-meta'),
+  previewBody: document.getElementById('preview-body'),
+  previewDownload: document.getElementById('preview-download'),
+  previewClose: document.getElementById('preview-close'),
 };
 
 let connection = null;
@@ -154,6 +160,7 @@ const ICONS = {
   monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16.5v.01"/>',
   play: '<path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z"/>',
+  eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>',
 };
 
 function icon(name) {
@@ -247,6 +254,35 @@ function renderTile(entry) {
   return el('span', `tile tile-${TILE_BY_EXTENSION[extension] ?? 'plain'}`, extension ? extension.toUpperCase() : 'FILE');
 }
 
+// Preview support: images, PDF, JSON and text. Kept apart from TILE_BY_EXTENSION above since that one is only
+// about the tile's color and label, not what can be shown in the preview dialog.
+const PREVIEW_KIND_BY_EXTENSION = {
+  png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', svg: 'image', bmp: 'image', ico: 'image',
+  pdf: 'pdf',
+  json: 'json',
+  txt: 'text', log: 'text', md: 'text', markdown: 'text', yaml: 'text', yml: 'text', xml: 'text', csv: 'text',
+  ini: 'text', conf: 'text',
+};
+
+// The blob's own content type is trusted first, since it reflects what was actually set when the blob was
+// written; the extension is only a fallback for a missing or generic one (e.g. "application/octet-stream").
+function previewKindOf(entry) {
+  if (entry.isFolder) return null;
+
+  const contentType = (entry.contentType ?? '').toLowerCase().split(';')[0].trim();
+  if (contentType.startsWith('image/')) return 'image';
+  if (contentType === 'application/pdf') return 'pdf';
+  if (contentType === 'application/json') return 'json';
+  if (contentType.startsWith('text/')) return 'text';
+
+  const match = /\.([A-Za-z0-9]{1,9})$/.exec(entry.name);
+  return match ? PREVIEW_KIND_BY_EXTENSION[match[1].toLowerCase()] ?? null : null;
+}
+
+// Above this, the preview dialog shows a "too large" message with a Download link instead of fetching or
+// embedding the content.
+const MAX_PREVIEW_BYTES = 15 * 1024 * 1024;
+
 const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
 function showMessage(text, isError = false) {
@@ -320,6 +356,7 @@ async function getJson(url) {
 
 const containerUrl = (container) => `${API}/blobs/containers/${encodeURIComponent(container)}`;
 const blobUrl = (container, path) => `${containerUrl(container)}/blob?path=${encodeURIComponent(path)}`;
+const previewUrl = (container, path) => `${blobUrl(container, path)}&inline=true`;
 
 const queuesUrl = `${API}/queues`;
 const queueUrl = (queue) => `${queuesUrl}/${encodeURIComponent(queue)}`;
@@ -629,6 +666,16 @@ function renderRow(container, entry) {
   const actions = el('td');
   const group = el('div', 'row-actions');
   if (!entry.isFolder) {
+    if (previewKindOf(entry)) {
+      const preview = el('button', 'icon-button outlined');
+      preview.type = 'button';
+      preview.title = 'Preview';
+      preview.setAttribute('aria-label', `Preview ${entry.name}`);
+      preview.append(icon('eye'));
+      preview.addEventListener('click', () => openPreview(container, entry));
+      group.append(preview);
+    }
+
     const download = link(blobUrl(container, entry.path), undefined, 'icon-button outlined');
     download.title = 'Download';
     download.setAttribute('aria-label', `Download ${entry.name}`);
@@ -1216,6 +1263,60 @@ async function deleteBlob(container, entry) {
   }
 }
 
+function prettyJson(text) {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    // Not valid JSON (or too unusual to parse): show it exactly as stored rather than fail the preview.
+    return text;
+  }
+}
+
+async function openPreview(container, entry) {
+  const kind = previewKindOf(entry);
+
+  els.previewTitle.textContent = entry.name;
+  els.previewMeta.textContent = [entry.contentType || 'Unknown type', formatSize(entry.size)].join(' · ');
+  els.previewDownload.href = blobUrl(container, entry.path);
+  els.previewBody.replaceChildren();
+  els.previewDialog.showModal();
+
+  if (entry.size != null && entry.size > MAX_PREVIEW_BYTES) {
+    els.previewBody.append(el('p', 'preview-message', `This file is too large to preview (${formatSize(entry.size)}). Download it instead.`));
+    return;
+  }
+
+  if (kind === 'image') {
+    const img = el('img', 'preview-image');
+    img.src = previewUrl(container, entry.path);
+    img.alt = entry.name;
+    els.previewBody.append(img);
+    return;
+  }
+
+  if (kind === 'pdf') {
+    const frame = el('iframe', 'preview-frame');
+    frame.src = previewUrl(container, entry.path);
+    frame.title = entry.name;
+    els.previewBody.append(frame);
+    return;
+  }
+
+  // json or text: fetched and shown as plain text (never innerHTML), so whatever the blob contains is always
+  // displayed literally and cannot run as script, no matter what its content type claims to be.
+  els.previewBody.append(el('p', 'preview-message', 'Loading…'));
+  try {
+    const response = await fetch(previewUrl(container, entry.path));
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const text = await response.text();
+    const pre = el('pre', 'preview-text');
+    pre.textContent = kind === 'json' ? prettyJson(text) : text;
+    els.previewBody.replaceChildren(pre);
+  } catch (error) {
+    els.previewBody.replaceChildren(el('p', 'preview-message error', `Could not load preview: ${error.message}`));
+  }
+}
+
 async function deleteQueue(name) {
   const confirmed = await confirmAction({
     title: 'Delete this queue permanently?',
@@ -1434,6 +1535,11 @@ async function pollTables() {
   tableContinuationToken = page.continuationToken;
   renderEntitiesTable();
 }
+
+els.previewClose.addEventListener('click', () => els.previewDialog.close());
+// Drop the body's content (an <img>/<iframe> can be a loaded image or PDF) rather than keep it around, however
+// the dialog closes (the close button or Esc).
+els.previewDialog.addEventListener('close', () => els.previewBody.replaceChildren());
 
 els.confirmCancel.addEventListener('click', () => els.confirmDialog.close('cancel'));
 els.confirmName.addEventListener('input', () => {

@@ -39,12 +39,19 @@ internal static class BlobEndpoints
             string container,
             string path,
             IBlobExplorerService explorer,
-            CancellationToken cancellationToken) =>
+            CancellationToken cancellationToken,
+            bool inline = false) =>
         {
             var download = await explorer.DownloadAsync(container, path, cancellationToken);
 
-            return download is null
-                ? Results.NotFound()
+            if (download is null)
+                return Results.NotFound();
+
+            // inline is for the preview dialog's <img>/<iframe>: omitting fileDownloadName means no
+            // Content-Disposition header is sent, so the browser renders the content instead of forcing a
+            // save dialog. Missing from the query string, it binds to false, so plain downloads are unchanged.
+            return inline
+                ? Results.Stream(download.Content, download.ContentType)
                 : Results.Stream(download.Content, download.ContentType, download.FileName);
         });
 

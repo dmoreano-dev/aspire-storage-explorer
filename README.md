@@ -8,8 +8,8 @@ explorer.
 
 **Features:** list and search containers, navigate folders with a breadcrumb, list blobs (name, size, content type,
 last modified), search them by name in a folder and everything below it or in the whole container, sort by any column,
-download a blob, and delete a blob after a confirmation that names the account (on an account that is not on your
-machine you also type the name of the blob). Deleting is only enabled for local endpoints unless you say otherwise (see
+download a blob, preview an image, PDF, JSON or text blob inline, and delete a blob after a confirmation that names
+the account (on an account that is not on your machine you also type the name of the blob). Deleting is only enabled for local endpoints unless you say otherwise (see
 [Read-only](#read-only)). Queues and tables are read-only for now: list queues with their message count and peek up to
 32 messages (ones written Base64-encoded are decoded automatically); list tables and query their entities with an
 OData filter, dynamic columns and paging. A **Blobs | Queues | Tables** switch above the list picks which one you're

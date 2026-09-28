@@ -145,6 +145,23 @@ public class ExplorerEndpointsTests
     }
 
     [Fact]
+    public async Task GetBlob_ExistingBlob_WithInlineTrue_OmitsContentDisposition()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Explorer.Download = new BlobDownload(new MemoryStream([1, 2, 3]), "image/png", "photo.png");
+
+        // Act
+        var response = await host.Client.GetAsync("/api/blobs/containers/photos/blob?path=photo.png&inline=true");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("image/png", response.Content.Headers.ContentType?.MediaType);
+        Assert.Null(response.Content.Headers.ContentDisposition);
+        Assert.Equal([1, 2, 3], await response.Content.ReadAsByteArrayAsync());
+    }
+
+    [Fact]
     public async Task GetBlob_MissingBlob_ReturnsNotFound()
     {
         // Arrange

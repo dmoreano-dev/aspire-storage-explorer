@@ -6,6 +6,14 @@ the date when you tag.
 
 ## [Unreleased]
 
+### Added
+
+- Preview for images, PDF, JSON and text blobs: a **Preview** button (an eye icon, next to Download) opens a
+  dialog and renders the content inline instead of downloading it. Images and PDFs are shown directly; JSON is
+  pretty-printed and text is shown as-is, both as plain text so nothing in the blob is ever executed. A file
+  whose content type or extension doesn't match one of these kinds gets no Preview button, and one over 15 MB
+  shows a "too large to preview" message with a Download link instead.
+
 ## [0.7.0] - 2026-09-28
 
 ### Added

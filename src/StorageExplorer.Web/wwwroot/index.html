@@ -210,6 +210,19 @@
     </form>
   </dialog>
 
+  <dialog id="preview-dialog" aria-labelledby="preview-title">
+    <form>
+      <span class="dialog-icon"><i data-icon="eye"></i></span>
+      <h2 id="preview-title"></h2>
+      <p id="preview-meta" class="hint"></p>
+      <div id="preview-body" class="preview-body"></div>
+      <menu>
+        <a id="preview-download" class="outlined-button">Download</a>
+        <button id="preview-close" type="button" class="primary">Close</button>
+      </menu>
+    </form>
+  </dialog>
+
   <script type="module" src="app.js"></script>
 </body>
 </html>
