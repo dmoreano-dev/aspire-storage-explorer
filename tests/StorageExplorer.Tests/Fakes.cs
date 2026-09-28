@@ -174,6 +174,12 @@ internal sealed class FakeBlobExplorerService : IBlobExplorerService
     public Task<bool> DeleteAsync(string container, string path, CancellationToken cancellationToken) =>
         Record($"delete:{container}:{path}", DeleteResult);
 
+    public async Task CreateContainerAsync(string container, CancellationToken cancellationToken) =>
+        await Record($"createContainer:{container}", true);
+
+    public async Task CreateFolderAsync(string container, string path, CancellationToken cancellationToken) =>
+        await Record($"createFolder:{container}:{path}", true);
+
     private Task<T> Record<T>(string call, T result)
     {
         Calls.Add(call);

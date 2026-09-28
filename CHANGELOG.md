@@ -6,6 +6,17 @@ the date when you tag.
 
 ## [Unreleased]
 
+### Added
+
+- Create containers and empty folders. A **New container** button next to the sidebar heading (Blobs only), and a
+  **New folder** button next to Upload, each opening a small dialog for the name. New endpoints
+  `POST /api/blobs/containers/{container}` and `POST /api/blobs/containers/{container}/folder?path=`, behind the
+  same `RequireExplorerHeaderFilter`/`RequireWritableFilter` guards as upload and delete, and hidden on a read-only
+  connection the same way. Azure Blob Storage has no folder object of its own, so an otherwise-empty folder is kept
+  alive by a hidden, zero-byte `.keep` blob inside it; `ListEntriesAsync` and `SearchAsync` never show that
+  placeholder as a file. (A blob named exactly like the folder, ending in "/", was tried first, but Azurite does not
+  keep a blob name's trailing "/", so it came back indistinguishable from a real file.)
+
 ## [0.8.0] - 2026-09-28
 
 ### Added

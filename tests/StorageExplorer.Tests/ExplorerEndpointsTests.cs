@@ -189,6 +189,38 @@ public class ExplorerEndpointsTests
         Assert.Empty(host.Explorer.Calls);
     }
 
+    // ---- create container / folder ----
+
+    [Fact]
+    public async Task PostContainer_Name_CreatesAndReturnsNoContent()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        var request = host.Request(HttpMethod.Post, "/api/blobs/containers/newcontainer");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(["createContainer:newcontainer"], host.Explorer.Calls);
+    }
+
+    [Fact]
+    public async Task PostFolder_Path_CreatesAndReturnsNoContent()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        var request = host.Request(HttpMethod.Post, "/api/blobs/containers/photos/folder?path=2025/new");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(["createFolder:photos:2025/new"], host.Explorer.Calls);
+    }
+
     // ---- upload ----
 
     [Fact]

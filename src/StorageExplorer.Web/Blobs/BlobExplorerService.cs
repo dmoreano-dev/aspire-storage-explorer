@@ -25,6 +25,19 @@ internal interface IBlobExplorerService
 
     /// <returns><c>true</c> when the blob existed and was deleted.</returns>
     Task<bool> DeleteAsync(string container, string path, CancellationToken cancellationToken);
+
+    /// <summary>Creates the container. Throws when one with that name already exists.</summary>
+    Task CreateContainerAsync(string container, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Creates an empty folder by uploading a hidden, zero-byte <c>.keep</c> placeholder blob inside it. Azure has no
+    /// folder object of its own, so an otherwise-empty folder needs this to survive a refresh; <see
+    /// cref="ListEntriesAsync"/> and <see cref="SearchAsync"/> never show that placeholder as a file. (A blob named
+    /// exactly like the folder itself, ending in "/", was tried first, but Azurite does not keep a blob name's
+    /// trailing "/": it comes back as a plain file called "path" instead of "path/", indistinguishable from real
+    /// content.)
+    /// </summary>
+    Task CreateFolderAsync(string container, string path, CancellationToken cancellationToken);
 }
 
 internal sealed class BlobExplorerService(IStorageConnection connection) : IBlobExplorerService
@@ -37,6 +50,10 @@ internal sealed class BlobExplorerService(IStorageConnection connection) : IBlob
     internal const int MaxScannedBlobs = 50_000;
 
     private const string Delimiter = "/";
+
+    // What CreateFolderAsync uploads to keep an otherwise-empty folder alive; see the interface doc comment for why
+    // it is a normal file inside the folder rather than a blob named like the folder itself.
+    private const string FolderPlaceholderName = ".keep";
 
     public async Task<IReadOnlyList<ContainerSummary>> ListContainersAsync(CancellationToken cancellationToken)
     {
@@ -74,6 +91,10 @@ internal sealed class BlobExplorerService(IStorageConnection connection) : IBlob
                 continue;
             }
 
+            // An empty folder's placeholder blob (see CreateFolderAsync); it carries no content of its own.
+            if (IsFolderPlaceholder(item.Blob.Name))
+                continue;
+
             var properties = item.Blob.Properties;
             files.Add(new ExplorerEntry(
                 LastSegment(item.Blob.Name),
@@ -108,6 +129,9 @@ internal sealed class BlobExplorerService(IStorageConnection connection) : IBlob
                 truncated = true;
                 break;
             }
+
+            if (IsFolderPlaceholder(blob.Name))
+                continue;
 
             var relativeName = blob.Name[prefixLength..];
             if (!relativeName.Contains(term, StringComparison.OrdinalIgnoreCase))
@@ -173,6 +197,16 @@ internal sealed class BlobExplorerService(IStorageConnection connection) : IBlob
         return response.Value;
     }
 
+    public async Task CreateContainerAsync(string container, CancellationToken cancellationToken) =>
+        await connection.Blob.GetBlobContainerClient(container).CreateAsync(cancellationToken: cancellationToken);
+
+    public async Task CreateFolderAsync(string container, string path, CancellationToken cancellationToken)
+    {
+        var blobClient = GetBlobClient(connection.Blob, container, NormalizePrefix(path) + FolderPlaceholderName);
+
+        await blobClient.UploadAsync(Stream.Null, cancellationToken: cancellationToken);
+    }
+
     /// <summary>
     /// The client of a blob. <c>GetBlobContainerClient(container).GetBlobClient(path)</c> is not enough on its own: the
     /// SDK reads an emulator address (<c>host/account/container/blob</c>) as such only when the host is an IPv4 address or
@@ -209,6 +243,9 @@ internal sealed class BlobExplorerService(IStorageConnection connection) : IBlob
         string.IsNullOrEmpty(prefix) || prefix.EndsWith(Delimiter, StringComparison.Ordinal)
             ? prefix
             : prefix + Delimiter;
+
+    private static bool IsFolderPlaceholder(string blobName) =>
+        blobName.EndsWith(Delimiter + FolderPlaceholderName, StringComparison.Ordinal);
 
     private static string LastSegment(string path) =>
         path.TrimEnd('/').Split('/')[^1];

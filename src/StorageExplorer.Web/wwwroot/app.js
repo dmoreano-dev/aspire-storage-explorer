@@ -13,6 +13,7 @@ const els = {
   containerFilter: document.getElementById('container-filter'),
   containerFilterField: document.getElementById('container-filter-field'),
   containerCount: document.getElementById('container-count'),
+  newContainerButton: document.getElementById('new-container-button'),
   filterShortcutHint: document.getElementById('filter-shortcut-hint'),
   breadcrumb: document.getElementById('breadcrumb'),
   title: document.getElementById('title'),
@@ -26,6 +27,7 @@ const els = {
   tbody: document.querySelector('#entries tbody'),
   panel: document.querySelector('.panel'),
   blobActions: document.getElementById('blob-actions'),
+  newFolderButton: document.getElementById('new-folder-button'),
   uploadButton: document.getElementById('upload-button'),
   uploadInput: document.getElementById('upload-input'),
   dropOverlay: document.getElementById('drop-overlay'),
@@ -77,6 +79,14 @@ const els = {
   connectionReset: document.getElementById('connection-reset'),
   connectionCancel: document.getElementById('connection-cancel'),
   connectionSubmit: document.getElementById('connection-submit'),
+  promptDialog: document.getElementById('prompt-dialog'),
+  promptForm: document.getElementById('prompt-form'),
+  promptTitle: document.getElementById('prompt-title'),
+  promptLabel: document.getElementById('prompt-label'),
+  promptInput: document.getElementById('prompt-input'),
+  promptError: document.getElementById('prompt-error'),
+  promptCancel: document.getElementById('prompt-cancel'),
+  promptSubmit: document.getElementById('prompt-submit'),
   previewDialog: document.getElementById('preview-dialog'),
   previewTitle: document.getElementById('preview-title'),
   previewMeta: document.getElementById('preview-meta'),
@@ -170,6 +180,7 @@ const ICONS = {
   play: '<path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z"/>',
   eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>',
   upload: '<path d="M12 20V9"/><path d="m7 13 5-5 5 5"/><path d="M5 4h14"/>',
+  plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
 };
 
 function icon(name) {
@@ -433,6 +444,8 @@ function renderSidebarHeading() {
   els.containerFilter.placeholder = labels.placeholder;
   els.containerFilter.setAttribute('aria-label', labels.placeholder);
   els.filterShortcutHint.title = `Press / to ${labels.placeholder.toLowerCase()}`;
+  // Hiding the button is only a courtesy: the server refuses the create on a read-only connection anyway.
+  els.newContainerButton.hidden = !(service === 'blobs' && connection && !connection.readOnly);
 }
 
 function renderSidebarList(active) {
@@ -1837,6 +1850,88 @@ els.tableFilterClear.addEventListener('click', () => {
   queryEntities(++renderToken, '');
 });
 els.loadMore.addEventListener('click', loadMoreEntities);
+
+// --- Create container / folder --------------------------------------------------
+// One generic "type a name" dialog, reused for both: it calls onSubmit(name) and closes on success, showing
+// onSubmit's error inline instead of closing, the same shape as the connection dialog below.
+
+let promptOnSubmit = null;
+
+function showPromptError(text) {
+  els.promptError.hidden = !text;
+  els.promptError.textContent = text ?? '';
+}
+
+function setPromptBusy(busy, idleLabel, busyLabel) {
+  els.promptSubmit.disabled = busy;
+  els.promptCancel.disabled = busy;
+  els.promptSubmit.textContent = busy ? busyLabel : idleLabel;
+}
+
+function openPrompt({ title, label, submitLabel, busyLabel, onSubmit }) {
+  els.promptTitle.textContent = title;
+  els.promptLabel.textContent = label;
+  els.promptInput.value = '';
+  showPromptError('');
+  setPromptBusy(false, submitLabel, busyLabel);
+
+  promptOnSubmit = async () => {
+    const name = els.promptInput.value.trim();
+    if (!name) return;
+
+    setPromptBusy(true, submitLabel, busyLabel);
+    showPromptError('');
+    try {
+      await onSubmit(name);
+      els.promptDialog.close();
+    } catch (error) {
+      showPromptError(error.message);
+    } finally {
+      setPromptBusy(false, submitLabel, busyLabel);
+    }
+  };
+
+  els.promptDialog.showModal();
+  els.promptInput.focus();
+}
+
+els.promptCancel.addEventListener('click', () => els.promptDialog.close());
+els.promptForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  promptOnSubmit?.();
+});
+
+els.newContainerButton.addEventListener('click', () => {
+  openPrompt({
+    title: 'New container',
+    label: 'Container name',
+    submitLabel: 'Create',
+    busyLabel: 'Creating…',
+    onSubmit: async (name) => {
+      await api(containerUrl(name), { method: 'POST', headers: REQUEST_HEADERS });
+      setStatus(`Created container ${name}`);
+      await refresh();
+    },
+  });
+});
+
+els.newFolderButton.addEventListener('click', () => {
+  if (!listed) return;
+  const { container, prefix } = listed;
+
+  openPrompt({
+    title: 'New folder',
+    label: 'Folder name',
+    submitLabel: 'Create',
+    busyLabel: 'Creating…',
+    onSubmit: async (name) => {
+      const path = `${prefix}${name.replace(/^\/+|\/+$/g, '')}/`;
+      await api(`${containerUrl(container)}/folder?path=${encodeURIComponent(path)}`, { method: 'POST', headers: REQUEST_HEADERS });
+      setStatus(`Created folder ${name}`);
+      await render();
+    },
+  });
+});
 
 // --- Upload button and drag & drop ----------------------------------------------
 

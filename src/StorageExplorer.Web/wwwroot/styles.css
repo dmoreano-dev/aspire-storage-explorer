@@ -227,6 +227,7 @@ kbd {
 .service-switch button[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
 
 .list-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+.list-heading-actions { display: flex; align-items: center; gap: 4px; }
 .list-heading h2 {
   margin: 0;
   color: var(--muted);
@@ -311,7 +312,7 @@ kbd {
 .panel-head { padding: 20px 24px 0; }
 .panel-head-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 
-.blob-actions { display: flex; align-items: center; flex-shrink: 0; }
+.blob-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .upload-button {
   display: flex;
   align-items: center;
@@ -390,6 +391,10 @@ kbd {
 .filter-count { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
 
 .outlined-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   height: 36px;
   padding: 0 16px;
   border: 1px solid var(--border-strong);
@@ -399,6 +404,7 @@ kbd {
   font-size: 13px;
   font-weight: 500;
 }
+.outlined-button svg.icon { width: 14px; height: 14px; }
 .outlined-button:hover { border-color: var(--muted); background: var(--accent-wash); }
 .outlined-button.danger { color: var(--danger); border-color: var(--danger-border); }
 .outlined-button.danger:hover { border-color: var(--danger); background: var(--danger-wash); }

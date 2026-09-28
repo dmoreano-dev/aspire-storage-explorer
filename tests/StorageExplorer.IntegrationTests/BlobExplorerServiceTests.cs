@@ -326,6 +326,66 @@ public sealed class BlobExplorerServiceTests(AzuriteFixture azurite) : IAsyncLif
 
     private static MemoryStream ContentStream(string content) => new(System.Text.Encoding.UTF8.GetBytes(content));
 
+    // ---- create container / folder ----
+
+    [Fact]
+    public async Task CreateContainerAsync_NewName_CreatesContainer()
+    {
+        // Arrange
+        var name = $"t{Guid.NewGuid():N}";
+        var client = new Azure.Storage.Blobs.BlobServiceClient(azurite.ConnectionString).GetBlobContainerClient(name);
+
+        try
+        {
+            // Act
+            await service.CreateContainerAsync(name, default);
+
+            // Assert
+            Assert.True(await client.ExistsAsync());
+        }
+        finally
+        {
+            await client.DeleteIfExistsAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CreateContainerAsync_ExistingContainer_ThrowsContainerAlreadyExists()
+    {
+        // Act
+        var actual = await Assert.ThrowsAsync<RequestFailedException>(() =>
+            service.CreateContainerAsync(container.Name, default));
+
+        // Assert
+        Assert.Equal(409, actual.Status);
+        Assert.Equal("ContainerAlreadyExists", actual.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateFolderAsync_NewPath_ShowsAsFolderNotFile()
+    {
+        // Act
+        await service.CreateFolderAsync(container.Name, "newfolder", default);
+
+        // Assert
+        var actual = await service.ListEntriesAsync(container.Name, null, default);
+        var folder = Assert.Single(actual.Entries, e => e.Name == "newfolder");
+        Assert.True(folder.IsFolder);
+    }
+
+    [Fact]
+    public async Task ListEntriesAsync_InsideEmptyFolder_ReturnsNoEntries()
+    {
+        // Arrange
+        await service.CreateFolderAsync(container.Name, "newfolder", default);
+
+        // Act
+        var actual = await service.ListEntriesAsync(container.Name, "newfolder", default);
+
+        // Assert
+        Assert.Empty(actual.Entries);
+    }
+
     // ---- delete ----
 
     [Fact]

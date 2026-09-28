@@ -12,6 +12,17 @@ internal static class BlobEndpoints
         api.MapGet("/containers", async (IBlobExplorerService explorer, CancellationToken cancellationToken) =>
             Results.Ok(await explorer.ListContainersAsync(cancellationToken)));
 
+        api.MapPost("/containers/{container}", async (
+                string container,
+                IBlobExplorerService explorer,
+                CancellationToken cancellationToken) =>
+            {
+                await explorer.CreateContainerAsync(container, cancellationToken);
+                return Results.NoContent();
+            })
+            .AddEndpointFilter<RequireExplorerHeaderFilter>()
+            .AddEndpointFilter<RequireWritableFilter>();
+
         api.MapGet("/containers/{container}/entries", async (
             string container,
             string? prefix,
@@ -70,6 +81,18 @@ internal static class BlobEndpoints
                     sizeFeature.MaxRequestBodySize = null;
 
                 await explorer.UploadAsync(container, path, request.Body, request.ContentType, cancellationToken);
+                return Results.NoContent();
+            })
+            .AddEndpointFilter<RequireExplorerHeaderFilter>()
+            .AddEndpointFilter<RequireWritableFilter>();
+
+        api.MapPost("/containers/{container}/folder", async (
+                string container,
+                string path,
+                IBlobExplorerService explorer,
+                CancellationToken cancellationToken) =>
+            {
+                await explorer.CreateFolderAsync(container, path, cancellationToken);
                 return Results.NoContent();
             })
             .AddEndpointFilter<RequireExplorerHeaderFilter>()

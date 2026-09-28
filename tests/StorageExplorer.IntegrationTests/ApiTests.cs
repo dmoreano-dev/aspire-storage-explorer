@@ -153,6 +153,47 @@ public sealed class ApiTests(AzuriteFixture azurite) : IAsyncLifetime
         Assert.StartsWith("ContainerNotFound", problem.GetProperty("detail").GetString());
     }
 
+    // ---- creating containers and folders ----
+
+    [Fact]
+    public async Task PostContainer_Name_CreatesContainer()
+    {
+        // Arrange
+        using var client = Start();
+        var name = $"t{Guid.NewGuid():N}";
+        var newContainer = new Azure.Storage.Blobs.BlobServiceClient(azurite.ConnectionString).GetBlobContainerClient(name);
+
+        try
+        {
+            // Act
+            var response = await client.SendAsync(WithHeader(HttpMethod.Post, $"/api/blobs/containers/{name}"));
+
+            // Assert
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+            Assert.True(await newContainer.ExistsAsync());
+        }
+        finally
+        {
+            await newContainer.DeleteIfExistsAsync();
+        }
+    }
+
+    [Fact]
+    public async Task PostFolder_Path_CreatesEmptyFolder()
+    {
+        // Arrange
+        using var client = Start();
+
+        // Act
+        var response = await client.SendAsync(WithHeader(HttpMethod.Post, Folder(container.Name, "newfolder")));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var entries = await client.GetFromJsonAsync<JsonElement>($"/api/blobs/containers/{container.Name}/entries");
+        var entry = Assert.Single(entries.GetProperty("entries").EnumerateArray(), e => e.GetProperty("name").GetString() == "newfolder");
+        Assert.True(entry.GetProperty("isFolder").GetBoolean());
+    }
+
     // ---- uploading ----
 
     [Fact]
@@ -470,6 +511,9 @@ public sealed class ApiTests(AzuriteFixture azurite) : IAsyncLifetime
 
     private static string Blob(string container, string path) =>
         $"/api/blobs/containers/{container}/blob?path={Uri.EscapeDataString(path)}";
+
+    private static string Folder(string container, string path) =>
+        $"/api/blobs/containers/{container}/folder?path={Uri.EscapeDataString(path)}";
 
     private static HttpContent Connection(string connectionString, bool allowWrites = false) =>
         JsonContent.Create(new { connectionString, allowWrites });
