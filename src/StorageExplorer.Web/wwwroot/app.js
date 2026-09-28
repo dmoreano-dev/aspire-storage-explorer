@@ -377,6 +377,7 @@ async function getJson(url) {
 const containerUrl = (container) => `${API}/blobs/containers/${encodeURIComponent(container)}`;
 const blobUrl = (container, path) => `${containerUrl(container)}/blob?path=${encodeURIComponent(path)}`;
 const previewUrl = (container, path) => `${blobUrl(container, path)}&inline=true`;
+const folderUrl = (container, path) => `${containerUrl(container)}/folder?path=${encodeURIComponent(path)}`;
 
 const queuesUrl = `${API}/queues`;
 const queueUrl = (queue) => `${queuesUrl}/${encodeURIComponent(queue)}`;
@@ -687,7 +688,18 @@ function renderRow(container, entry) {
 
   const actions = el('td');
   const group = el('div', 'row-actions');
-  if (!entry.isFolder) {
+  if (entry.isFolder) {
+    // Hiding the button is only a courtesy: the server refuses the delete on a read-only connection anyway.
+    if (connection && !connection.readOnly) {
+      const deleteButton = el('button', 'icon-button danger');
+      deleteButton.type = 'button';
+      deleteButton.title = 'Delete folder';
+      deleteButton.setAttribute('aria-label', `Delete folder ${entry.name}`);
+      deleteButton.append(icon('trash'));
+      deleteButton.addEventListener('click', () => deleteFolder(container, entry));
+      group.append(deleteButton);
+    }
+  } else {
     if (previewKindOf(entry)) {
       const preview = el('button', 'icon-button outlined');
       preview.type = 'button';
@@ -1373,6 +1385,39 @@ async function deleteBlob(container, entry) {
   try {
     await api(blobUrl(container, entry.path), { method: 'DELETE', headers: REQUEST_HEADERS });
     setStatus(`Deleted ${entry.path}`);
+    await render();
+  } catch (error) {
+    showMessage(`Could not delete "${entry.path}": ${error.message}`, true);
+  }
+}
+
+async function deleteFolder(container, entry) {
+  setStatus('Counting blobs…');
+  let count, truncated;
+  try {
+    ({ count, truncated } = await getJson(folderUrl(container, entry.path)));
+  } catch (error) {
+    showMessage(`Could not count the blobs in "${entry.path}": ${error.message}`, true);
+    return;
+  }
+
+  const countLabel = truncated ? `More than ${plural(count, 'blob')}` : plural(count, 'blob');
+  const confirmed = await confirmAction({
+    title: 'Delete this folder permanently?',
+    localWarning: 'It will be removed from the account below, with every blob in it and below it. This cannot be undone.',
+    remoteWarning:
+      'It will be removed from an account that is not on this machine, with every blob in it and below it. This ' +
+      'cannot be undone.',
+    details: [['Container', container], ['Folder', entry.path], ['Blobs', countLabel]],
+    submitLabel: 'Delete permanently',
+    confirmText: entry.name,
+  });
+  if (!confirmed) return;
+
+  try {
+    const response = await api(folderUrl(container, entry.path), { method: 'DELETE', headers: REQUEST_HEADERS });
+    const { deleted } = await response.json();
+    setStatus(`Deleted ${plural(deleted, 'blob')} from ${entry.path}`);
     await render();
   } catch (error) {
     showMessage(`Could not delete "${entry.path}": ${error.message}`, true);

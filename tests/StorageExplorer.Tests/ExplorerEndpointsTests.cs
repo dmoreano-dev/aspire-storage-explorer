@@ -289,6 +289,45 @@ public class ExplorerEndpointsTests
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    // ---- recursive folder delete ----
+
+    [Fact]
+    public async Task GetFolder_Path_ReturnsCount()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Explorer.FolderCount = new FolderBlobCount(3, Truncated: false);
+
+        // Act
+        var response = await host.Client.GetAsync("/api/blobs/containers/photos/folder?path=2025/");
+        var body = await response.Content.ReadAsStringAsync();
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var count = JsonDocument.Parse(body).RootElement;
+        Assert.Equal(3, count.GetProperty("count").GetInt32());
+        Assert.False(count.GetProperty("truncated").GetBoolean());
+        Assert.Equal(["countFolder:photos:2025/"], host.Explorer.Calls);
+    }
+
+    [Fact]
+    public async Task DeleteFolder_Path_DeletesAndReturnsDeletedCount()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Explorer.DeletedFolderCount = 5;
+        var request = host.Request(HttpMethod.Delete, "/api/blobs/containers/photos/folder?path=2025/");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(5, JsonDocument.Parse(body).RootElement.GetProperty("deleted").GetInt32());
+        Assert.Equal(["deleteFolder:photos:2025/"], host.Explorer.Calls);
+    }
+
     // ---- changing the connection ----
 
     [Fact]

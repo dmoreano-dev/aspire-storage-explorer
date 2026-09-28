@@ -398,6 +398,72 @@ public sealed class ApiTests(AzuriteFixture azurite) : IAsyncLifetime
         Assert.True(await container.Exists("2025/notes.txt"));
     }
 
+    // ---- recursive folder delete ----
+
+    [Fact]
+    public async Task GetFolder_Path_ReturnsCountOfBlobsBelowIt()
+    {
+        // Arrange
+        using var client = Start();
+
+        // Act
+        var response = await client.GetAsync(Folder(container.Name, "2025/"));
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(2, body.GetProperty("count").GetInt32()); // q1/report.csv, notes.txt
+        Assert.False(body.GetProperty("truncated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task DeleteFolder_Path_DeletesEverythingBelowItAndReturnsDeletedCount()
+    {
+        // Arrange
+        using var client = Start();
+        var request = WithHeader(HttpMethod.Delete, Folder(container.Name, "2025/"));
+
+        // Act
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(2, body.GetProperty("deleted").GetInt32());
+        Assert.False(await container.Exists("2025/q1/report.csv"));
+        Assert.False(await container.Exists("2025/notes.txt"));
+        Assert.True(await container.Exists("readme.txt"));
+    }
+
+    [Fact]
+    public async Task DeleteFolder_WithoutExplorerHeader_DeletesNothing()
+    {
+        // Arrange
+        using var client = Start();
+
+        // Act
+        var response = await client.DeleteAsync(Folder(container.Name, "2025/"));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.True(await container.Exists("2025/notes.txt"));
+    }
+
+    [Fact]
+    public async Task DeleteFolder_LockedExplorer_ReturnsForbiddenAndDeletesNothing()
+    {
+        // Arrange
+        using var client = Start(readOnly: true);
+        var request = WithHeader(HttpMethod.Delete, Folder(container.Name, "2025/"));
+
+        // Act
+        var response = await client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.True(await container.Exists("2025/notes.txt"));
+    }
+
     // ---- changing the connection ----
 
     [Fact]

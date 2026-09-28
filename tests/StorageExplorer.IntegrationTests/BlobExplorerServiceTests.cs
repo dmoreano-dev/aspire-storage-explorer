@@ -439,6 +439,85 @@ public sealed class BlobExplorerServiceTests(AzuriteFixture azurite) : IAsyncLif
         Assert.True(await container.Exists("2025/notes.txt"));
     }
 
+    // ---- recursive folder delete ----
+
+    [Fact]
+    public async Task CountFolderAsync_Folder_CountsBlobsInItAndBelowButNotElsewhere()
+    {
+        // Act
+        var actual = await service.CountFolderAsync(container.Name, "2025/", default);
+
+        // Assert
+        // notes.txt, q1/report.csv, q1/summary.txt, q2/report.csv - not readme.txt, data.json, 2026/plan.md.
+        Assert.Equal(4, actual.Count);
+        Assert.False(actual.Truncated);
+    }
+
+    [Fact]
+    public async Task CountFolderAsync_EmptyFolder_DoesNotCountThePlaceholder()
+    {
+        // Arrange
+        await service.CreateFolderAsync(container.Name, "empty", default);
+
+        // Act
+        var actual = await service.CountFolderAsync(container.Name, "empty/", default);
+
+        // Assert
+        Assert.Equal(0, actual.Count);
+    }
+
+    [Fact]
+    public async Task CountFolderAsync_MissingFolder_ReturnsZero()
+    {
+        // Act
+        var actual = await service.CountFolderAsync(container.Name, "nope/", default);
+
+        // Assert
+        Assert.Equal(0, actual.Count);
+        Assert.False(actual.Truncated);
+    }
+
+    [Fact]
+    public async Task DeleteFolderAsync_Folder_DeletesEverythingInItAndBelowButNotElsewhere()
+    {
+        // Act
+        var deleted = await service.DeleteFolderAsync(container.Name, "2025/", default);
+
+        // Assert
+        Assert.Equal(4, deleted);
+        Assert.False(await container.Exists("2025/notes.txt"));
+        Assert.False(await container.Exists("2025/q1/report.csv"));
+        Assert.False(await container.Exists("2025/q1/summary.txt"));
+        Assert.False(await container.Exists("2025/q2/report.csv"));
+        Assert.True(await container.Exists("readme.txt"));
+        Assert.True(await container.Exists("2026/plan.md"));
+    }
+
+    [Fact]
+    public async Task DeleteFolderAsync_FolderWithPlaceholder_RemovesPlaceholderButExcludesItFromCount()
+    {
+        // Arrange
+        await service.CreateFolderAsync(container.Name, "empty", default);
+
+        // Act
+        var deleted = await service.DeleteFolderAsync(container.Name, "empty/", default);
+
+        // Assert
+        Assert.Equal(0, deleted);
+        var listing = await service.ListEntriesAsync(container.Name, null, default);
+        Assert.DoesNotContain(listing.Entries, e => e.Name == "empty");
+    }
+
+    [Fact]
+    public async Task DeleteFolderAsync_MissingFolder_DeletesNothingAndReturnsZero()
+    {
+        // Act
+        var deleted = await service.DeleteFolderAsync(container.Name, "nope/", default);
+
+        // Assert
+        Assert.Equal(0, deleted);
+    }
+
     // ---- names that need escaping ----
 
     // The full name of the blob, the folder it is in (or null for the root of the container) and its own name.

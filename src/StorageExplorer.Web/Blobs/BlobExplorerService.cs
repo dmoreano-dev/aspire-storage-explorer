@@ -38,6 +38,23 @@ internal interface IBlobExplorerService
     /// content.)
     /// </summary>
     Task CreateFolderAsync(string container, string path, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Counts the blobs under <paramref name="path"/>, in that folder and every folder below it: the same set a
+    /// recursive delete of it would remove. Placeholder blobs (see <see cref="CreateFolderAsync"/>) are not counted,
+    /// matching what <see cref="ListEntriesAsync"/> and <see cref="SearchAsync"/> show. Stops and reports
+    /// <see cref="FolderBlobCount.Truncated"/> after <see cref="MaxScannedBlobs"/> blobs, so a very large folder still
+    /// answers quickly enough to show before a delete confirmation.
+    /// </summary>
+    Task<FolderBlobCount> CountFolderAsync(string container, string path, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Deletes every blob under <paramref name="path"/>, in that folder and every folder below it, including nested
+    /// placeholder blobs. Unlike <see cref="CountFolderAsync"/> this has no cap: it keeps going until the folder is
+    /// empty, however many blobs that takes.
+    /// </summary>
+    /// <returns>How many blobs were deleted, not counting placeholders (the same set <see cref="CountFolderAsync"/> counts).</returns>
+    Task<int> DeleteFolderAsync(string container, string path, CancellationToken cancellationToken);
 }
 
 internal sealed class BlobExplorerService(IStorageConnection connection) : IBlobExplorerService
@@ -205,6 +222,52 @@ internal sealed class BlobExplorerService(IStorageConnection connection) : IBlob
         var blobClient = GetBlobClient(connection.Blob, container, NormalizePrefix(path) + FolderPlaceholderName);
 
         await blobClient.UploadAsync(Stream.Null, cancellationToken: cancellationToken);
+    }
+
+    public async Task<FolderBlobCount> CountFolderAsync(string container, string path, CancellationToken cancellationToken)
+    {
+        var containerClient = connection.Blob.GetBlobContainerClient(container);
+        var count = 0;
+        var scanned = 0;
+
+        await foreach (var blob in containerClient.GetBlobsAsync(
+                           traits: BlobTraits.None,
+                           states: BlobStates.None,
+                           prefix: NormalizePrefix(path),
+                           cancellationToken: cancellationToken))
+        {
+            if (scanned++ >= MaxScannedBlobs)
+                return new FolderBlobCount(count, Truncated: true);
+
+            if (!IsFolderPlaceholder(blob.Name))
+                count++;
+        }
+
+        return new FolderBlobCount(count, Truncated: false);
+    }
+
+    public async Task<int> DeleteFolderAsync(string container, string path, CancellationToken cancellationToken)
+    {
+        var containerClient = connection.Blob.GetBlobContainerClient(container);
+        var deleted = 0;
+
+        await foreach (var blob in containerClient.GetBlobsAsync(
+                           traits: BlobTraits.None,
+                           states: BlobStates.None,
+                           prefix: NormalizePrefix(path),
+                           cancellationToken: cancellationToken))
+        {
+            // Routed through GetBlobClient, not containerClient.GetBlobClient(blob.Name) directly, for the same
+            // emulator-addressing reason DeleteAsync is: it is a bug in building the client, not in where the blob
+            // name came from.
+            var blobClient = GetBlobClient(connection.Blob, container, blob.Name);
+            await blobClient.DeleteIfExistsAsync(DeleteSnapshotsOption.IncludeSnapshots, cancellationToken: cancellationToken);
+
+            if (!IsFolderPlaceholder(blob.Name))
+                deleted++;
+        }
+
+        return deleted;
     }
 
     /// <summary>

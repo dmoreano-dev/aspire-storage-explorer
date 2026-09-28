@@ -156,6 +156,10 @@ internal sealed class FakeBlobExplorerService : IBlobExplorerService
 
     public bool DeleteResult { get; set; } = true;
 
+    public FolderBlobCount FolderCount { get; set; } = new(0, Truncated: false);
+
+    public int DeletedFolderCount { get; set; }
+
     public Task<IReadOnlyList<ContainerSummary>> ListContainersAsync(CancellationToken cancellationToken) =>
         Record("containers", Containers);
 
@@ -179,6 +183,12 @@ internal sealed class FakeBlobExplorerService : IBlobExplorerService
 
     public async Task CreateFolderAsync(string container, string path, CancellationToken cancellationToken) =>
         await Record($"createFolder:{container}:{path}", true);
+
+    public Task<FolderBlobCount> CountFolderAsync(string container, string path, CancellationToken cancellationToken) =>
+        Record($"countFolder:{container}:{path}", FolderCount);
+
+    public Task<int> DeleteFolderAsync(string container, string path, CancellationToken cancellationToken) =>
+        Record($"deleteFolder:{container}:{path}", DeletedFolderCount);
 
     private Task<T> Record<T>(string call, T result)
     {

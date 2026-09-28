@@ -98,6 +98,26 @@ internal static class BlobEndpoints
             .AddEndpointFilter<RequireExplorerHeaderFilter>()
             .AddEndpointFilter<RequireWritableFilter>();
 
+        // For the recursive delete confirmation: how many blobs are under this folder, before the user commits.
+        api.MapGet("/containers/{container}/folder", async (
+            string container,
+            string path,
+            IBlobExplorerService explorer,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await explorer.CountFolderAsync(container, path, cancellationToken)));
+
+        api.MapDelete("/containers/{container}/folder", async (
+                string container,
+                string path,
+                IBlobExplorerService explorer,
+                CancellationToken cancellationToken) =>
+            {
+                var deleted = await explorer.DeleteFolderAsync(container, path, cancellationToken);
+                return Results.Ok(new { deleted });
+            })
+            .AddEndpointFilter<RequireExplorerHeaderFilter>()
+            .AddEndpointFilter<RequireWritableFilter>();
+
         api.MapDelete("/containers/{container}/blob", async (
                 string container,
                 string path,

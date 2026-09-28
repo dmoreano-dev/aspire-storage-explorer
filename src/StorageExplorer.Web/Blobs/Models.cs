@@ -22,3 +22,10 @@ internal sealed record ExplorerEntry(
 internal sealed record EntryListing(IReadOnlyList<ExplorerEntry> Entries, bool Truncated);
 
 internal sealed record BlobDownload(Stream Content, string ContentType, string FileName);
+
+/// <param name="Count">
+/// Blobs under the folder, in it and every folder below it, not counting placeholder blobs. Capped at <see
+/// cref="BlobExplorerService.MaxScannedBlobs"/>.
+/// </param>
+/// <param name="Truncated">True when the folder holds more blobs than were counted.</param>
+internal sealed record FolderBlobCount(int Count, bool Truncated);

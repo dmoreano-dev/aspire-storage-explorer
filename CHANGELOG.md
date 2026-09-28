@@ -6,8 +6,19 @@ the date when you tag.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-28
+
 ### Added
 
+- Recursive folder delete: the same trash icon rows already had for a blob now shows on a folder row too, and
+  deletes every blob in it and every folder below it. The confirm dialog counts them first (`GET
+  /api/blobs/containers/{container}/folder?path=`, capped at the same 50,000-blob scan limit search uses, showing
+  "More than N blobs" past that) so the user knows what they are about to lose before committing. `DELETE
+  /api/blobs/containers/{container}/folder?path=` does the actual delete, uncapped, and returns how many blobs it
+  removed (not counting the hidden `.keep` placeholders of any now-empty subfolders, which it also removes); behind
+  the same `RequireExplorerHeaderFilter`/`RequireWritableFilter` guards and read-only hiding as the other write
+  actions. Each blob is routed through the same emulator-address-fixing helper `DeleteAsync` uses, since the
+  addressing bug it works around is in building the blob client, not in where the blob's name came from.
 - Create containers and empty folders. A **New container** button next to the sidebar heading (Blobs only), and a
   **New folder** button next to Upload, each opening a small dialog for the name. New endpoints
   `POST /api/blobs/containers/{container}` and `POST /api/blobs/containers/{container}/folder?path=`, behind the

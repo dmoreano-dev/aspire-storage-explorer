@@ -203,6 +203,7 @@ public class GuardTests
         Assert.Equal(
             [
                 "DELETE /api/blobs/containers/x/blob",
+                "DELETE /api/blobs/containers/x/folder",
                 "DELETE /api/connection",
                 "DELETE /api/queues/x",
                 "DELETE /api/queues/x/messages",
