@@ -168,6 +168,9 @@ internal sealed class FakeBlobExplorerService : IBlobExplorerService
     public Task<BlobDownload?> DownloadAsync(string container, string path, CancellationToken cancellationToken) =>
         Record($"download:{container}:{path}", Download);
 
+    public async Task UploadAsync(string container, string path, Stream content, string? contentType, CancellationToken cancellationToken) =>
+        await Record($"upload:{container}:{path}:{contentType}", true);
+
     public Task<bool> DeleteAsync(string container, string path, CancellationToken cancellationToken) =>
         Record($"delete:{container}:{path}", DeleteResult);
 

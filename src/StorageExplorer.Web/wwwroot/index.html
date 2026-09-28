@@ -61,7 +61,21 @@
       <main class="panel">
         <div class="panel-head">
           <nav id="breadcrumb" class="breadcrumb" aria-label="Path"></nav>
-          <h2 id="title" class="title"></h2>
+          <div class="panel-head-row">
+            <h2 id="title" class="title"></h2>
+            <div id="blob-actions" class="blob-actions" hidden>
+              <button id="upload-button" class="upload-button" type="button" title="Existing blobs with the same name are overwritten.">
+                <i data-icon="upload"></i>
+                Upload
+              </button>
+              <input id="upload-input" type="file" multiple hidden>
+            </div>
+          </div>
+        </div>
+
+        <div id="drop-overlay" class="drop-overlay" hidden>
+          <i data-icon="upload"></i>
+          <span>Drop to upload</span>
         </div>
 
         <div id="toolbar" class="toolbar" hidden>

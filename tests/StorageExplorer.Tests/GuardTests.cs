@@ -209,6 +209,7 @@ public class GuardTests
                 "DELETE /api/queues/x/messages/peeked",
                 "DELETE /api/tables/x",
                 "DELETE /api/tables/x/entities",
+                "POST /api/blobs/containers/x/blob",
                 "PUT /api/connection",
             ],
             actual);

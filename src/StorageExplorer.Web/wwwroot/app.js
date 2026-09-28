@@ -24,6 +24,11 @@ const els = {
   listing: document.getElementById('listing'),
   sortHeaders: document.querySelectorAll('#entries th[data-sort]'),
   tbody: document.querySelector('#entries tbody'),
+  panel: document.querySelector('.panel'),
+  blobActions: document.getElementById('blob-actions'),
+  uploadButton: document.getElementById('upload-button'),
+  uploadInput: document.getElementById('upload-input'),
+  dropOverlay: document.getElementById('drop-overlay'),
   queueToolbar: document.getElementById('queue-toolbar'),
   queueFilter: document.getElementById('queue-filter'),
   queueFilterCount: document.getElementById('queue-filter-count'),
@@ -99,6 +104,9 @@ let searchScope = 'folder';
 let sort = { key: 'name', direction: 1 };
 // What must be typed to confirm a delete on an account that is not on this machine, or '' when nothing is asked.
 let requiredName = '';
+// How many nested dragenter events (the listing, a row, ...) are unmatched by a dragleave yet; the drop overlay shows
+// while this is above zero, so moving over a child element does not flicker it on and off.
+let dragDepth = 0;
 
 // --- Queues state --------------------------------------------------------------
 
@@ -161,6 +169,7 @@ const ICONS = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16.5v.01"/>',
   play: '<path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z"/>',
   eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>',
+  upload: '<path d="M12 20V9"/><path d="m7 13 5-5 5 5"/><path d="M5 4h14"/>',
 };
 
 function icon(name) {
@@ -714,6 +723,7 @@ async function render() {
   if (service !== 'blobs') {
     els.listing.hidden = true;
     els.toolbar.hidden = true;
+    els.blobActions.hidden = true;
   }
   if (service !== 'queues') {
     els.queueListing.hidden = true;
@@ -740,6 +750,8 @@ async function renderBlobsView(container, prefix) {
 
   renderSidebarList(container);
   renderLocation(container, prefix);
+  // Hiding the button is only a courtesy: the server refuses the upload on a read-only connection anyway.
+  els.blobActions.hidden = !(container && connection && !connection.readOnly);
 
   // A search applies to the folder it was typed in.
   const locationKey = `${container}/${prefix}`;
@@ -1242,6 +1254,97 @@ function confirmAction({ title, localWarning, remoteWarning, details, submitLabe
   });
 }
 
+// --- Upload -----------------------------------------------------------------
+// Every file is a separate POST of its raw bytes (no multipart form): the button and the drop zone both reduce to a
+// list of { path, file }, path being where the blob lands relative to the folder on screen.
+
+function canUploadHere() {
+  return service === 'blobs' && listed != null && connection != null && !connection.readOnly;
+}
+
+// A handful of uploads at once rather than one connection per file (a dropped folder can hold hundreds) or all of
+// them at once (which would let a huge folder open that many connections in one go).
+const UPLOAD_CONCURRENCY = 4;
+
+async function uploadFiles(container, prefix, items) {
+  if (items.length === 0) return;
+
+  const total = items.length;
+  let done = 0;
+  const failures = [];
+
+  setStatus(`Uploading 1/${plural(total, 'file')}…`);
+
+  const queue = [...items];
+  async function worker() {
+    while (queue.length > 0) {
+      const item = queue.shift();
+      const path = prefix + item.path;
+      try {
+        await api(blobUrl(container, path), {
+          method: 'POST',
+          headers: { ...REQUEST_HEADERS, 'Content-Type': item.file.type || 'application/octet-stream' },
+          body: item.file,
+        });
+      } catch (error) {
+        failures.push(`${item.path} (${error.message})`);
+      }
+      done++;
+      if (done < total) setStatus(`Uploading ${done + 1}/${plural(total, 'file')}…`);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, items.length) }, worker));
+  await render();
+
+  if (failures.length === 0) setStatus(`Uploaded ${plural(total, 'file')}.`);
+  else showMessage(`Uploaded ${total - failures.length} of ${plural(total, 'file')}. Failed: ${failures.join(', ')}`, true);
+}
+
+// Reads whatever was dropped into a flat list of { path, file }, walking into dropped folders when the browser
+// exposes the File System Entry API (every current browser does); a plain file list otherwise.
+async function filesFromDataTransfer(dataTransfer) {
+  // webkitGetAsEntry() is read synchronously here, before any await: the DataTransferItemList it comes from is only
+  // valid for the duration of the event, and some browsers clear it once this handler yields.
+  const entries = [...(dataTransfer.items ?? [])].map((item) => item.webkitGetAsEntry?.()).filter(Boolean);
+
+  if (entries.length === 0) return [...dataTransfer.files].map((file) => ({ path: file.name, file }));
+
+  const items = [];
+  await Promise.all(entries.map((entry) => walkEntry(entry, '', items)));
+  return items;
+}
+
+function walkEntry(entry, prefix, items) {
+  if (entry.isFile) {
+    return new Promise((resolve, reject) => {
+      entry.file((file) => {
+        items.push({ path: `${prefix}${entry.name}`, file });
+        resolve();
+      }, reject);
+    });
+  }
+
+  if (!entry.isDirectory) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const reader = entry.createReader();
+    // A directory reader hands out entries in batches (Chrome stops at 100), so it has to be called again and again
+    // until it comes back empty, not just once.
+    const readNextBatch = () => {
+      reader.readEntries(async (batch) => {
+        if (batch.length === 0) {
+          resolve();
+          return;
+        }
+        await Promise.all(batch.map((child) => walkEntry(child, `${prefix}${entry.name}/`, items)));
+        readNextBatch();
+      }, reject);
+    };
+    readNextBatch();
+  });
+}
+
 async function deleteBlob(container, entry) {
   const fileName = entry.path.slice(entry.path.lastIndexOf('/') + 1);
   const confirmed = await confirmAction({
@@ -1537,8 +1640,17 @@ async function pollTables() {
 }
 
 els.previewClose.addEventListener('click', () => els.previewDialog.close());
+// A native <dialog> reports the dialog element itself as the click target for a click on its backdrop (there is no
+// separate element to listen on), and also for one that lands in the dialog's own padding around the form. The
+// bounding rect tells those two apart: only outside it is the actual backdrop.
+els.previewDialog.addEventListener('click', (event) => {
+  if (event.target !== els.previewDialog) return;
+  const rect = els.previewDialog.getBoundingClientRect();
+  const inside = event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
+  if (!inside) els.previewDialog.close();
+});
 // Drop the body's content (an <img>/<iframe> can be a loaded image or PDF) rather than keep it around, however
-// the dialog closes (the close button or Esc).
+// the dialog closes (the close button, Esc, or a click on the backdrop).
 els.previewDialog.addEventListener('close', () => els.previewBody.replaceChildren());
 
 els.confirmCancel.addEventListener('click', () => els.confirmDialog.close('cancel'));
@@ -1725,6 +1837,49 @@ els.tableFilterClear.addEventListener('click', () => {
   queryEntities(++renderToken, '');
 });
 els.loadMore.addEventListener('click', loadMoreEntities);
+
+// --- Upload button and drag & drop ----------------------------------------------
+
+els.uploadButton.addEventListener('click', () => els.uploadInput.click());
+els.uploadInput.addEventListener('change', () => {
+  const files = [...els.uploadInput.files];
+  els.uploadInput.value = ''; // Otherwise choosing the same file again later would not fire "change".
+  if (files.length === 0 || !canUploadHere()) return;
+
+  const { container, prefix } = listed;
+  uploadFiles(container, prefix, files.map((file) => ({ path: file.name, file })));
+});
+
+const hasFilesToDrop = (dataTransfer) => dataTransfer?.types?.includes('Files') ?? false;
+
+// Not preventDefault-ing dragenter/dragover when uploading is not possible here (no container selected, read-only,
+// another service on screen) leaves the browser's own "drop not allowed" cursor in charge, with no extra messaging.
+els.panel.addEventListener('dragenter', (event) => {
+  if (!canUploadHere() || !hasFilesToDrop(event.dataTransfer)) return;
+  event.preventDefault();
+  dragDepth++;
+  els.dropOverlay.hidden = false;
+});
+els.panel.addEventListener('dragover', (event) => {
+  if (!canUploadHere() || !hasFilesToDrop(event.dataTransfer)) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'copy';
+});
+els.panel.addEventListener('dragleave', () => {
+  if (dragDepth === 0) return;
+  dragDepth--;
+  if (dragDepth === 0) els.dropOverlay.hidden = true;
+});
+els.panel.addEventListener('drop', async (event) => {
+  if (!canUploadHere() || !hasFilesToDrop(event.dataTransfer)) return;
+  event.preventDefault();
+  dragDepth = 0;
+  els.dropOverlay.hidden = true;
+
+  const { container, prefix } = listed;
+  const items = await filesFromDataTransfer(event.dataTransfer);
+  await uploadFiles(container, prefix, items);
+});
 
 els.refresh.addEventListener('click', refresh);
 window.addEventListener('hashchange', render);

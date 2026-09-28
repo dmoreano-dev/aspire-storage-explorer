@@ -6,13 +6,25 @@ the date when you tag.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-28
+
 ### Added
 
 - Preview for images, PDF, JSON and text blobs: a **Preview** button (an eye icon, next to Download) opens a
   dialog and renders the content inline instead of downloading it. Images and PDFs are shown directly; JSON is
   pretty-printed and text is shown as-is, both as plain text so nothing in the blob is ever executed. A file
   whose content type or extension doesn't match one of these kinds gets no Preview button, and one over 15 MB
-  shows a "too large to preview" message with a Download link instead.
+  shows a "too large to preview" message with a Download link instead. Clicking the backdrop closes the dialog,
+  the same as Close or Esc.
+- Upload files, with drag and drop: an **Upload** button next to the folder title opens a file picker, and the whole
+  panel accepts files dropped onto it (with a "Drop to upload" overlay while dragging). Dropping a folder uploads it
+  recursively, using the File System Entry API browsers expose for a real OS drag, with a handful of uploads in
+  flight at once rather than one at a time or all of them together. Uploading to a name that already exists
+  overwrites it, the same way dropping a file onto a folder replaces it in a desktop file explorer. New endpoint,
+  `POST /api/blobs/containers/{container}/blob?path=`, behind the same `RequireExplorerHeaderFilter` and
+  `RequireWritableFilter` guards as delete; it takes the raw request body as the blob content (not a multipart
+  form) and has no request size limit of its own. Both the button and drag-and-drop are hidden on a read-only
+  connection, same courtesy as the other write actions.
 
 ## [0.7.0] - 2026-09-28
 

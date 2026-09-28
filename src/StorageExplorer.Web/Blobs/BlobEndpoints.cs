@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http.Features;
 using StorageExplorer.Web.Endpoints;
 
 namespace StorageExplorer.Web.Blobs;
@@ -54,6 +55,25 @@ internal static class BlobEndpoints
                 ? Results.Stream(download.Content, download.ContentType)
                 : Results.Stream(download.Content, download.ContentType, download.FileName);
         });
+
+        api.MapPost("/containers/{container}/blob", async (
+                string container,
+                string path,
+                HttpRequest request,
+                IBlobExplorerService explorer,
+                CancellationToken cancellationToken) =>
+            {
+                // The upload is the raw request body (drag and drop sends the file itself, not a multipart form), which
+                // can be far larger than Kestrel's 30 MB default request body limit; this endpoint has none.
+                var sizeFeature = request.HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>();
+                if (sizeFeature is { IsReadOnly: false })
+                    sizeFeature.MaxRequestBodySize = null;
+
+                await explorer.UploadAsync(container, path, request.Body, request.ContentType, cancellationToken);
+                return Results.NoContent();
+            })
+            .AddEndpointFilter<RequireExplorerHeaderFilter>()
+            .AddEndpointFilter<RequireWritableFilter>();
 
         api.MapDelete("/containers/{container}/blob", async (
                 string container,

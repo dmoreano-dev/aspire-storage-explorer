@@ -153,6 +153,73 @@ public sealed class ApiTests(AzuriteFixture azurite) : IAsyncLifetime
         Assert.StartsWith("ContainerNotFound", problem.GetProperty("detail").GetString());
     }
 
+    // ---- uploading ----
+
+    [Fact]
+    public async Task PostBlob_NewPath_CreatesBlobWithBodyAndContentType()
+    {
+        // Arrange
+        using var client = Start();
+        var request = WithHeader(HttpMethod.Post, Blob(container.Name, "2025/q3/new.csv"), new ByteArrayContent("a,b\n5,6\n"u8.ToArray()));
+        request.Content!.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/csv");
+
+        // Act
+        var response = await client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var blob = container.Client.GetBlobClient("2025/q3/new.csv");
+        var properties = await blob.GetPropertiesAsync();
+        Assert.Equal("text/csv", properties.Value.ContentType);
+        var download = await client.GetAsync(Blob(container.Name, "2025/q3/new.csv"));
+        Assert.Equal("a,b\n5,6\n", await download.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task PostBlob_ExistingPath_OverwritesIt()
+    {
+        // Arrange
+        using var client = Start();
+        var request = WithHeader(HttpMethod.Post, Blob(container.Name, "readme.txt"), new ByteArrayContent("replaced"u8.ToArray()));
+
+        // Act
+        var response = await client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var download = await client.GetAsync(Blob(container.Name, "readme.txt"));
+        Assert.Equal("replaced", await download.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task PostBlob_WithoutExplorerHeader_UploadsNothing()
+    {
+        // Arrange
+        using var client = Start();
+
+        // Act
+        var response = await client.PostAsync(Blob(container.Name, "new.txt"), new ByteArrayContent("x"u8.ToArray()));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.False(await container.Exists("new.txt"));
+    }
+
+    [Fact]
+    public async Task PostBlob_LockedExplorer_ReturnsForbiddenAndUploadsNothing()
+    {
+        // Arrange
+        using var client = Start(readOnly: true);
+        var request = WithHeader(HttpMethod.Post, Blob(container.Name, "new.txt"), new ByteArrayContent("x"u8.ToArray()));
+
+        // Act
+        var response = await client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.False(await container.Exists("new.txt"));
+    }
+
     // ---- deleting ----
 
     [Fact]

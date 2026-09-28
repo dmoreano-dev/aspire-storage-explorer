@@ -256,6 +256,76 @@ public sealed class BlobExplorerServiceTests(AzuriteFixture azurite) : IAsyncLif
         Assert.Null(actual);
     }
 
+    // ---- upload ----
+
+    [Fact]
+    public async Task UploadAsync_NewBlob_CreatesItWithContentAndContentType()
+    {
+        // Act
+        await using var content = ContentStream("hello there");
+        await service.UploadAsync(container.Name, "2025/q3/new.txt", content, "text/plain", default);
+
+        // Assert
+        var blob = container.Client.GetBlobClient("2025/q3/new.txt");
+        var properties = await blob.GetPropertiesAsync();
+        Assert.Equal("text/plain", properties.Value.ContentType);
+        Assert.Equal("hello there", await ReadAll((await blob.DownloadStreamingAsync()).Value.Content));
+    }
+
+    [Fact]
+    public async Task UploadAsync_ExistingBlob_OverwritesItsContentAndContentType()
+    {
+        // Act
+        await using var content = ContentStream("replaced");
+        await service.UploadAsync(container.Name, "readme.txt", content, "text/markdown", default);
+
+        // Assert
+        var blob = container.Client.GetBlobClient("readme.txt");
+        var properties = await blob.GetPropertiesAsync();
+        Assert.Equal("text/markdown", properties.Value.ContentType);
+        Assert.Equal("replaced", await ReadAll((await blob.DownloadStreamingAsync()).Value.Content));
+    }
+
+    [Fact]
+    public async Task UploadAsync_NoContentType_LeavesTheDefaultOne()
+    {
+        // Act
+        await using var content = ContentStream("data");
+        await service.UploadAsync(container.Name, "2025/q3/blank.bin", content, null, default);
+
+        // Assert
+        var properties = await container.Client.GetBlobClient("2025/q3/blank.bin").GetPropertiesAsync();
+        Assert.Equal("application/octet-stream", properties.Value.ContentType);
+    }
+
+    [Fact]
+    public async Task UploadAsync_MissingContainer_ThrowsContainerNotFound()
+    {
+        // Act
+        await using var content = ContentStream("data");
+        var actual = await Assert.ThrowsAsync<RequestFailedException>(() =>
+            service.UploadAsync("no-such-container", "file.txt", content, "text/plain", default));
+
+        // Assert
+        Assert.Equal(404, actual.Status);
+        Assert.Equal("ContainerNotFound", actual.ErrorCode);
+    }
+
+    [Theory]
+    [MemberData(nameof(SpecialNames))]
+    public async Task UploadAsync_SpecialCharactersInName_UploadsToThatBlob(string name, string? folder, string leaf)
+    {
+        // Act
+        await using var content = ContentStream(name);
+        await service.UploadAsync(container.Name, name, content, "text/plain", default);
+
+        // Assert
+        Assert.True(await container.Exists(name));
+        Assert.Equal(name, await ReadAll((await container.Client.GetBlobClient(name).DownloadStreamingAsync()).Value.Content));
+    }
+
+    private static MemoryStream ContentStream(string content) => new(System.Text.Encoding.UTF8.GetBytes(content));
+
     // ---- delete ----
 
     [Fact]

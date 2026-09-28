@@ -189,6 +189,42 @@ public class ExplorerEndpointsTests
         Assert.Empty(host.Explorer.Calls);
     }
 
+    // ---- upload ----
+
+    [Fact]
+    public async Task PostBlob_Content_UploadsWithContentTypeAndReturnsNoContent()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        var request = host.Request(HttpMethod.Post, "/api/blobs/containers/photos/blob?path=2025/cat.png");
+        request.Content = new ByteArrayContent([1, 2, 3]);
+        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(["upload:photos:2025/cat.png:image/png"], host.Explorer.Calls);
+    }
+
+    [Fact]
+    public async Task PostBlob_NoContentType_UploadsWithNullContentType()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        var request = host.Request(HttpMethod.Post, "/api/blobs/containers/photos/blob?path=notes.txt");
+        request.Content = new ByteArrayContent([1]);
+        request.Content.Headers.ContentType = null;
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(["upload:photos:notes.txt:"], host.Explorer.Calls);
+    }
+
     // ---- delete ----
 
     [Fact]

@@ -20,6 +20,9 @@ internal interface IBlobExplorerService
     /// <returns>The blob content, or <c>null</c> when the blob does not exist.</returns>
     Task<BlobDownload?> DownloadAsync(string container, string path, CancellationToken cancellationToken);
 
+    /// <summary>Creates the blob, or overwrites it when one with that name already exists.</summary>
+    Task UploadAsync(string container, string path, Stream content, string? contentType, CancellationToken cancellationToken);
+
     /// <returns><c>true</c> when the blob existed and was deleted.</returns>
     Task<bool> DeleteAsync(string container, string path, CancellationToken cancellationToken);
 }
@@ -147,6 +150,19 @@ internal sealed class BlobExplorerService(IStorageConnection connection) : IBlob
         {
             return null;
         }
+    }
+
+    public async Task UploadAsync(string container, string path, Stream content, string? contentType, CancellationToken cancellationToken)
+    {
+        var blobClient = GetBlobClient(connection.Blob, container, path);
+
+        // No conditions set on the options means this overwrites a blob already at that name, the same way dropping a
+        // file with the same name onto a folder replaces it on a desktop file explorer.
+        var options = new BlobUploadOptions();
+        if (!string.IsNullOrEmpty(contentType))
+            options.HttpHeaders = new BlobHttpHeaders { ContentType = contentType };
+
+        await blobClient.UploadAsync(content, options, cancellationToken);
     }
 
     public async Task<bool> DeleteAsync(string container, string path, CancellationToken cancellationToken)

@@ -297,6 +297,7 @@ kbd {
 /* --- Panel ------------------------------------------------------------------- */
 
 .panel {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -308,6 +309,45 @@ kbd {
 }
 
 .panel-head { padding: 20px 24px 0; }
+.panel-head-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+
+.blob-actions { display: flex; align-items: center; flex-shrink: 0; }
+.upload-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.upload-button:hover { opacity: 0.92; }
+.upload-button svg.icon { width: 14px; height: 14px; }
+
+/* Shown over the whole panel while a file is dragged over it; pointer-events: none so it never itself becomes the
+   drag target, which would make entering and leaving it fire its own dragenter/dragleave and cause flicker. */
+.drop-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+}
+.drop-overlay svg.icon { width: 20px; height: 20px; }
 .breadcrumb {
   display: flex;
   flex-wrap: wrap;
