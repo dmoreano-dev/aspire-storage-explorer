@@ -1,3 +1,4 @@
+using Azure;
 using Azure.Data.Tables;
 using Microsoft.Extensions.Options;
 using StorageExplorer.Web.Tables;
@@ -41,5 +42,15 @@ public sealed class TestTable : IAsyncDisposable
 
     public Task AddAsync(TableEntity entity) => Client.AddEntityAsync(entity);
 
-    public async ValueTask DisposeAsync() => await Client.DeleteAsync();
+    // TableClient has no DeleteIfExistsAsync (unlike QueueClient), and a test may have already deleted the table itself.
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await Client.DeleteAsync();
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+        }
+    }
 }

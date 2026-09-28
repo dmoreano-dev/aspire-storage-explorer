@@ -204,6 +204,11 @@ public class GuardTests
             [
                 "DELETE /api/blobs/containers/x/blob",
                 "DELETE /api/connection",
+                "DELETE /api/queues/x",
+                "DELETE /api/queues/x/messages",
+                "DELETE /api/queues/x/messages/peeked",
+                "DELETE /api/tables/x",
+                "DELETE /api/tables/x/entities",
                 "PUT /api/connection",
             ],
             actual);
@@ -223,7 +228,7 @@ public class GuardTests
         // Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("X-Storage-Explorer", (await Problem(response)).GetProperty("title").GetString());
-        Assert.Empty(host.Explorer.Calls);
+        AssertNoExplorerCalls(host);
         Assert.Empty(host.Connection.Used);
         Assert.Equal(0, host.Connection.ResetCount);
     }
@@ -241,7 +246,7 @@ public class GuardTests
 
         // Assert
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        Assert.Empty(host.Explorer.Calls);
+        AssertNoExplorerCalls(host);
         Assert.Empty(host.Connection.Used);
         Assert.Equal(0, host.Connection.ResetCount);
     }
@@ -260,7 +265,7 @@ public class GuardTests
         // Assert
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Equal("The explorer is read-only", (await Problem(response)).GetProperty("title").GetString());
-        Assert.Empty(host.Explorer.Calls);
+        AssertNoExplorerCalls(host);
     }
 
     [Theory]
@@ -277,7 +282,16 @@ public class GuardTests
         // Assert
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Equal("The explorer is read-only", (await Problem(response)).GetProperty("title").GetString());
+        AssertNoExplorerCalls(host);
+    }
+
+    // A route belongs to one of the three explorer fakes; checking only Explorer (Blob) would trivially pass for a
+    // Queue or Table route without proving anything, since that fake would never be touched by it anyway.
+    private static void AssertNoExplorerCalls(ApiHost host)
+    {
         Assert.Empty(host.Explorer.Calls);
+        Assert.Empty(host.Queues.Calls);
+        Assert.Empty(host.Tables.Calls);
     }
 
     private static async Task<JsonElement> Problem(HttpResponseMessage response) =>
@@ -300,7 +314,7 @@ public class GuardTests
                 .Where(method => !HttpMethods.IsGet(method) && !HttpMethods.IsHead(method))
                 .Select(method => (
                     Method: method,
-                    Uri: RouteParameter.Replace(endpoint.RoutePattern.RawText!, "x") + "?path=x&q=x&prefix=x")))
+                    Uri: RouteParameter.Replace(endpoint.RoutePattern.RawText!, "x") + "?path=x&q=x&prefix=x&partitionKey=x&rowKey=x")))
             .ToList();
 
     private static HttpRequestMessage DataChangingRequest(ApiHost host, string method, string uri, bool explorerHeader, string? origin = null)

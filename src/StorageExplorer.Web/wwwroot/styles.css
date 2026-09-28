@@ -269,10 +269,13 @@ kbd {
   overflow: auto;
   list-style: none;
 }
+#containers li { display: flex; align-items: center; gap: 2px; }
 #containers a {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 1;
+  min-width: 0;
   min-height: 36px;
   padding: 6px 10px;
   border-radius: 8px;
@@ -285,6 +288,10 @@ kbd {
 #containers .sidebar-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The approximate message count next to a queue. */
 #containers a .count { flex-shrink: 0; }
+/* Delete queue/table, next to its row; a courtesy hidden until hovered, like a listing row's own actions. */
+.sidebar-item-delete { flex-shrink: 0; margin-right: 6px; opacity: 0; transition: opacity 0.1s; }
+#containers li:hover .sidebar-item-delete, #containers li:focus-within .sidebar-item-delete { opacity: 1; }
+@media (hover: none) { .sidebar-item-delete { opacity: 1; } }
 
 /* --- Panel ------------------------------------------------------------------- */
 
@@ -352,6 +359,8 @@ kbd {
   font-weight: 500;
 }
 .outlined-button:hover { border-color: var(--muted); background: var(--accent-wash); }
+.outlined-button.danger { color: var(--danger); border-color: var(--danger-border); }
+.outlined-button.danger:hover { border-color: var(--danger); background: var(--danger-wash); }
 
 .message { margin: 0; padding: 16px 24px; color: var(--muted); }
 .message.error { color: var(--danger); }

@@ -12,6 +12,24 @@ internal interface IQueueExplorerService
     /// hide a message from a consumer or raise its <c>DequeueCount</c>, unlike receiving one.
     /// </returns>
     Task<IReadOnlyList<QueueMessage>> PeekMessagesAsync(string queue, CancellationToken cancellationToken);
+
+    /// <returns><c>true</c> if the queue existed and was deleted, <c>false</c> if it did not exist.</returns>
+    Task<bool> DeleteQueueAsync(string queue, CancellationToken cancellationToken);
+
+    /// <summary>Removes every message in the queue, not just the ones a peek would show.</summary>
+    Task ClearQueueAsync(string queue, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Deletes the messages a peek would show right now (up to <see cref="QueueExplorerService.MaxPeekedMessages"/>),
+    /// and only those: it peeks again immediately before receiving, and only deletes a received message whose ID was
+    /// in that fresh peek, releasing anything else received unharmed. This keeps the window in which a message the
+    /// user never saw could get swept up and deleted down to the gap between those two calls, instead of however
+    /// long the page had been open. A message that falls in that gap still gets its <c>DequeueCount</c> raised even
+    /// though it is released rather than deleted — receiving is the only way to get the pop receipt delete requires,
+    /// and it cannot be limited to specific message IDs, so this is the closest this can get to exact.
+    /// </summary>
+    /// <returns>How many messages were actually deleted.</returns>
+    Task<int> DeletePeekedMessagesAsync(string queue, CancellationToken cancellationToken);
 }
 
 internal sealed class QueueExplorerService(IStorageConnection connection) : IQueueExplorerService
@@ -52,6 +70,42 @@ internal sealed class QueueExplorerService(IStorageConnection connection) : IQue
         var response = await connection.Queue!.GetQueueClient(queue).PeekMessagesAsync(MaxPeekedMessages, cancellationToken);
 
         return response.Value.Select(ToQueueMessage).ToArray();
+    }
+
+    public async Task<bool> DeleteQueueAsync(string queue, CancellationToken cancellationToken)
+    {
+        var response = await connection.Queue!.GetQueueClient(queue).DeleteIfExistsAsync(cancellationToken: cancellationToken);
+        return response.Value;
+    }
+
+    public Task ClearQueueAsync(string queue, CancellationToken cancellationToken) =>
+        connection.Queue!.GetQueueClient(queue).ClearMessagesAsync(cancellationToken);
+
+    public async Task<int> DeletePeekedMessagesAsync(string queue, CancellationToken cancellationToken)
+    {
+        var queueClient = connection.Queue!.GetQueueClient(queue);
+
+        var peeked = await queueClient.PeekMessagesAsync(MaxPeekedMessages, cancellationToken);
+        var targetIds = peeked.Value.Select(message => message.MessageId).ToHashSet();
+
+        var received = await queueClient.ReceiveMessagesAsync(MaxPeekedMessages, cancellationToken: cancellationToken);
+
+        var deleted = 0;
+        foreach (var message in received.Value)
+        {
+            if (targetIds.Contains(message.MessageId))
+            {
+                await queueClient.DeleteMessageAsync(message.MessageId, message.PopReceipt, cancellationToken);
+                deleted++;
+            }
+            else
+            {
+                await queueClient.UpdateMessageAsync(
+                    message.MessageId, message.PopReceipt, visibilityTimeout: TimeSpan.Zero, cancellationToken: cancellationToken);
+            }
+        }
+
+        return deleted;
     }
 
     private static QueueMessage ToQueueMessage(PeekedMessage message)

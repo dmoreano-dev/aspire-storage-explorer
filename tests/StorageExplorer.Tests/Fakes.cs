@@ -191,11 +191,24 @@ internal sealed class FakeQueueExplorerService : IQueueExplorerService
 
     public IReadOnlyList<QueueMessage> Messages { get; set; } = [];
 
+    public bool DeleteQueueResult { get; set; } = true;
+
+    public int DeletedPeekedCount { get; set; }
+
     public Task<IReadOnlyList<QueueSummary>> ListQueuesAsync(CancellationToken cancellationToken) =>
         Record("queues", Queues);
 
     public Task<IReadOnlyList<QueueMessage>> PeekMessagesAsync(string queue, CancellationToken cancellationToken) =>
         Record($"messages:{queue}", Messages);
+
+    public Task<bool> DeleteQueueAsync(string queue, CancellationToken cancellationToken) =>
+        Record($"deleteQueue:{queue}", DeleteQueueResult);
+
+    public async Task ClearQueueAsync(string queue, CancellationToken cancellationToken) =>
+        await Record($"clearQueue:{queue}", true);
+
+    public Task<int> DeletePeekedMessagesAsync(string queue, CancellationToken cancellationToken) =>
+        Record($"deletePeeked:{queue}", DeletedPeekedCount);
 
     private Task<T> Record<T>(string call, T result)
     {
@@ -222,6 +235,12 @@ internal sealed class FakeTableExplorerService : ITableExplorerService
 
     public Task<EntityPage> QueryEntitiesAsync(string table, string? filter, string? continuationToken, CancellationToken cancellationToken) =>
         Record($"entities:{table}:{filter}:{continuationToken}", Page);
+
+    public async Task DeleteTableAsync(string table, CancellationToken cancellationToken) =>
+        await Record($"deleteTable:{table}", true);
+
+    public async Task DeleteEntityAsync(string table, string partitionKey, string rowKey, CancellationToken cancellationToken) =>
+        await Record($"deleteEntity:{table}:{partitionKey}:{rowKey}", true);
 
     private Task<T> Record<T>(string call, T result)
     {

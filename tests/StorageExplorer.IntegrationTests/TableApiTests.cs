@@ -92,6 +92,53 @@ public sealed class TableApiTests(AzuriteFixture azurite) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DeleteTable_ExistingTable_ReturnsNoContentAndRemovesIt()
+    {
+        // Arrange
+        using var client = Start();
+
+        // Act
+        var response = await client.SendAsync(WithHeader(HttpMethod.Delete, $"/api/tables/{table.Name}"));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var listing = await client.GetFromJsonAsync<JsonElement>("/api/tables");
+        Assert.DoesNotContain(listing.EnumerateArray(), t => t.GetProperty("name").GetString() == table.Name);
+    }
+
+    [Fact]
+    public async Task DeleteEntity_ExistingEntity_ReturnsNoContentAndRemovesOnlyThatOne()
+    {
+        // Arrange
+        await table.AddAsync(new TableEntity("b", "2"));
+        using var client = Start();
+
+        // Act
+        var response = await client.SendAsync(WithHeader(HttpMethod.Delete, $"/api/tables/{table.Name}/entities?partitionKey=a&rowKey=1"));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var entities = await client.GetFromJsonAsync<JsonElement>($"/api/tables/{table.Name}/entities");
+        var remaining = Assert.Single(entities.GetProperty("entities").EnumerateArray());
+        Assert.Equal("b", remaining.GetProperty("PartitionKey").GetString());
+    }
+
+    [Fact]
+    public async Task DeleteEntity_WithoutExplorerHeader_DeletesNothing()
+    {
+        // Arrange
+        using var client = Start();
+
+        // Act
+        var response = await client.DeleteAsync($"/api/tables/{table.Name}/entities?partitionKey=a&rowKey=1");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var entities = await client.GetFromJsonAsync<JsonElement>($"/api/tables/{table.Name}/entities");
+        Assert.Single(entities.GetProperty("entities").EnumerateArray());
+    }
+
+    [Fact]
     public async Task GetTables_ConnectionWithNoTableEndpoint_ReturnsBadRequest()
     {
         // Arrange
@@ -109,6 +156,13 @@ public sealed class TableApiTests(AzuriteFixture azurite) : IAsyncLifetime
         // Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("No table endpoint", problem.GetProperty("title").GetString());
+    }
+
+    private static HttpRequestMessage WithHeader(HttpMethod method, string uri)
+    {
+        var request = new HttpRequestMessage(method, uri);
+        request.Headers.Add("X-Storage-Explorer", "1");
+        return request;
     }
 
     private HttpClient Start(string? connectionString = null)

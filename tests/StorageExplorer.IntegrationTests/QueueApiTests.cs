@@ -80,6 +80,70 @@ public sealed class QueueApiTests(AzuriteFixture azurite) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DeleteQueue_ExistingQueue_ReturnsNoContentAndRemovesIt()
+    {
+        // Arrange
+        using var client = Start();
+
+        // Act
+        var response = await client.SendAsync(WithHeader(HttpMethod.Delete, $"/api/queues/{queue.Name}"));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var listing = await client.GetFromJsonAsync<JsonElement>("/api/queues");
+        Assert.DoesNotContain(listing.EnumerateArray(), q => q.GetProperty("name").GetString() == queue.Name);
+    }
+
+    [Fact]
+    public async Task ClearQueue_QueueWithMessages_RemovesEvenMessagesBeyondThePeekWindow()
+    {
+        // Arrange
+        for (var i = 0; i < 40; i++)
+            await queue.SendAsync($"extra {i}");
+        using var client = Start();
+
+        // Act
+        var response = await client.SendAsync(WithHeader(HttpMethod.Delete, $"/api/queues/{queue.Name}/messages"));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var listed = await client.GetFromJsonAsync<JsonElement>("/api/queues");
+        var summary = Assert.Single(listed.EnumerateArray(), q => q.GetProperty("name").GetString() == queue.Name);
+        Assert.Equal(0, summary.GetProperty("approximateMessageCount").GetInt64());
+    }
+
+    [Fact]
+    public async Task DeletePeekedMessages_QueueWithOneMessage_ReturnsHowManyWereDeleted()
+    {
+        // Arrange
+        using var client = Start();
+
+        // Act
+        var response = await client.SendAsync(WithHeader(HttpMethod.Delete, $"/api/queues/{queue.Name}/messages/peeked"));
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, body.GetProperty("deleted").GetInt32());
+        Assert.Empty((await client.GetFromJsonAsync<JsonElement>($"/api/queues/{queue.Name}/messages")).EnumerateArray());
+    }
+
+    [Fact]
+    public async Task DeletePeekedMessages_WithoutExplorerHeader_DeletesNothing()
+    {
+        // Arrange
+        using var client = Start();
+
+        // Act
+        var response = await client.DeleteAsync($"/api/queues/{queue.Name}/messages/peeked");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var actual = await client.GetFromJsonAsync<JsonElement>($"/api/queues/{queue.Name}/messages");
+        Assert.Single(actual.EnumerateArray());
+    }
+
+    [Fact]
     public async Task GetQueues_ConnectionWithNoQueueEndpoint_ReturnsBadRequest()
     {
         // Arrange
@@ -97,6 +161,13 @@ public sealed class QueueApiTests(AzuriteFixture azurite) : IAsyncLifetime
         // Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("No queue endpoint", problem.GetProperty("title").GetString());
+    }
+
+    private static HttpRequestMessage WithHeader(HttpMethod method, string uri)
+    {
+        var request = new HttpRequestMessage(method, uri);
+        request.Headers.Add("X-Storage-Explorer", "1");
+        return request;
     }
 
     private HttpClient Start(string? connectionString = null)

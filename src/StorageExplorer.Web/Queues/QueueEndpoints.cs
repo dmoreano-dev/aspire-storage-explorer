@@ -1,3 +1,5 @@
+using StorageExplorer.Web.Endpoints;
+
 namespace StorageExplorer.Web.Queues;
 
 internal static class QueueEndpoints
@@ -22,6 +24,43 @@ internal static class QueueEndpoints
             connection.Queue is null
                 ? NoQueueEndpoint()
                 : Results.Ok(await explorer.PeekMessagesAsync(queue, cancellationToken)));
+
+        api.MapDelete("/{queue}", async (
+                string queue,
+                IStorageConnection connection,
+                IQueueExplorerService explorer,
+                CancellationToken cancellationToken) =>
+                connection.Queue is null
+                    ? NoQueueEndpoint()
+                    : await explorer.DeleteQueueAsync(queue, cancellationToken) ? Results.NoContent() : Results.NotFound())
+            .AddEndpointFilter<RequireExplorerHeaderFilter>()
+            .AddEndpointFilter<RequireWritableFilter>();
+
+        api.MapDelete("/{queue}/messages", async (
+                string queue,
+                IStorageConnection connection,
+                IQueueExplorerService explorer,
+                CancellationToken cancellationToken) =>
+                {
+                    if (connection.Queue is null) return NoQueueEndpoint();
+                    await explorer.ClearQueueAsync(queue, cancellationToken);
+                    return Results.NoContent();
+                })
+            .AddEndpointFilter<RequireExplorerHeaderFilter>()
+            .AddEndpointFilter<RequireWritableFilter>();
+
+        api.MapDelete("/{queue}/messages/peeked", async (
+                string queue,
+                IStorageConnection connection,
+                IQueueExplorerService explorer,
+                CancellationToken cancellationToken) =>
+                {
+                    if (connection.Queue is null) return NoQueueEndpoint();
+                    var deleted = await explorer.DeletePeekedMessagesAsync(queue, cancellationToken);
+                    return Results.Ok(new { deleted });
+                })
+            .AddEndpointFilter<RequireExplorerHeaderFilter>()
+            .AddEndpointFilter<RequireWritableFilter>();
 
         return app;
     }

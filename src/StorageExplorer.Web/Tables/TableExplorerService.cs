@@ -12,6 +12,16 @@ internal interface ITableExplorerService
     /// From a previous <see cref="EntityPage.ContinuationToken"/>, to continue after it; <c>null</c> for the first page.
     /// </param>
     Task<EntityPage> QueryEntitiesAsync(string table, string? filter, string? continuationToken, CancellationToken cancellationToken);
+
+    /// <remarks>A missing table throws (Azurite answers with a plain 400, real Azure with 404 <c>TableNotFound</c> — see <see cref="QueryEntitiesAsync"/>).</remarks>
+    Task DeleteTableAsync(string table, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Unconditional: no ETag is exposed to the client (<see cref="ToRow"/> strips it), so there is nothing to match
+    /// against.
+    /// </summary>
+    /// <remarks>A missing entity does not throw: the SDK treats this delete as already accomplished, not an error.</remarks>
+    Task DeleteEntityAsync(string table, string partitionKey, string rowKey, CancellationToken cancellationToken);
 }
 
 internal sealed class TableExplorerService(IStorageConnection connection) : ITableExplorerService
@@ -54,6 +64,12 @@ internal sealed class TableExplorerService(IStorageConnection connection) : ITab
 
         return new EntityPage(ColumnsOf(rows), rows, string.IsNullOrEmpty(page.ContinuationToken) ? null : page.ContinuationToken);
     }
+
+    public Task DeleteTableAsync(string table, CancellationToken cancellationToken) =>
+        connection.Table!.GetTableClient(table).DeleteAsync(cancellationToken);
+
+    public Task DeleteEntityAsync(string table, string partitionKey, string rowKey, CancellationToken cancellationToken) =>
+        connection.Table!.GetTableClient(table).DeleteEntityAsync(partitionKey, rowKey, cancellationToken: cancellationToken);
 
     private static IReadOnlyDictionary<string, object?> ToRow(TableEntity entity)
     {

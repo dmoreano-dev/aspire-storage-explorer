@@ -27,6 +27,8 @@ const els = {
   queueToolbar: document.getElementById('queue-toolbar'),
   queueFilter: document.getElementById('queue-filter'),
   queueFilterCount: document.getElementById('queue-filter-count'),
+  deletePeekedMessages: document.getElementById('delete-peeked-messages'),
+  clearQueue: document.getElementById('clear-queue'),
   queueNote: document.getElementById('queue-note'),
   queueListing: document.getElementById('queue-listing'),
   messagesBody: document.querySelector('#messages tbody'),
@@ -49,11 +51,9 @@ const els = {
   refresh: document.getElementById('refresh'),
   theme: document.getElementById('theme'),
   confirmDialog: document.getElementById('confirm-dialog'),
+  confirmTitle: document.getElementById('confirm-title'),
   confirmText: document.getElementById('confirm-text'),
-  confirmAccount: document.getElementById('confirm-account'),
-  confirmContainer: document.getElementById('confirm-container'),
-  confirmBlob: document.getElementById('confirm-blob'),
-  confirmSize: document.getElementById('confirm-size'),
+  confirmDetails: document.getElementById('confirm-details'),
   confirmNameField: document.getElementById('confirm-name-field'),
   confirmNameHint: document.getElementById('confirm-name-hint'),
   confirmName: document.getElementById('confirm-name'),
@@ -322,17 +322,22 @@ const containerUrl = (container) => `${API}/blobs/containers/${encodeURIComponen
 const blobUrl = (container, path) => `${containerUrl(container)}/blob?path=${encodeURIComponent(path)}`;
 
 const queuesUrl = `${API}/queues`;
-const queueMessagesUrl = (queue) => `${queuesUrl}/${encodeURIComponent(queue)}/messages`;
+const queueUrl = (queue) => `${queuesUrl}/${encodeURIComponent(queue)}`;
+const queueMessagesUrl = (queue) => `${queueUrl(queue)}/messages`;
+const queuePeekedMessagesUrl = (queue) => `${queueMessagesUrl(queue)}/peeked`;
 
 const tablesUrl = `${API}/tables`;
+const tableUrl = (table) => `${tablesUrl}/${encodeURIComponent(table)}`;
 function tableEntitiesUrl(table, filter, continuationToken) {
   const params = new URLSearchParams();
   if (filter) params.set('filter', filter);
   if (continuationToken) params.set('continuationToken', continuationToken);
 
   const query = params.toString();
-  return `${tablesUrl}/${encodeURIComponent(table)}/entities${query ? `?${query}` : ''}`;
+  return `${tableUrl(table)}/entities${query ? `?${query}` : ''}`;
 }
+const entityUrl = (table, partitionKey, rowKey) =>
+  `${tableUrl(table)}/entities?partitionKey=${encodeURIComponent(partitionKey)}&rowKey=${encodeURIComponent(rowKey)}`;
 
 // --- Rendering -----------------------------------------------------------------
 
@@ -396,6 +401,23 @@ function renderSidebarList(active) {
     if (service === 'queues') anchor.append(el('span', 'count', String(item.approximateMessageCount)));
     if (item.name === active) anchor.setAttribute('aria-current', 'page');
     row.append(anchor);
+
+    // Hiding the button is only a courtesy: the server refuses the delete on a read-only connection anyway.
+    if ((service === 'queues' || service === 'tables') && connection && !connection.readOnly) {
+      const deleteButton = el('button', 'icon-button danger sidebar-item-delete');
+      deleteButton.type = 'button';
+      deleteButton.title = service === 'queues' ? 'Delete queue' : 'Delete table';
+      deleteButton.setAttribute('aria-label', `Delete ${item.name}`);
+      deleteButton.append(icon('trash'));
+      deleteButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (service === 'queues') deleteQueue(item.name);
+        else deleteTable(item.name);
+      });
+      row.append(deleteButton);
+    }
+
     return row;
   });
 
@@ -762,6 +784,11 @@ function renderQueueMessages() {
   els.queueNote.hidden = all.length === 0;
   els.queueListing.hidden = messages.length === 0;
   els.queueFilterCount.textContent = term ? `${messages.length} found` : '';
+
+  // Hiding the buttons is only a courtesy: the server refuses either delete on a read-only connection anyway.
+  const canWrite = connection && !connection.readOnly;
+  els.deletePeekedMessages.hidden = !canWrite;
+  els.clearQueue.hidden = !canWrite;
   els.itemCount.textContent = messages.length > 0 ? plural(messages.length, 'message') : '';
 
   if (all.length === 0) showMessage('This queue has no messages to peek right now.');
@@ -935,8 +962,14 @@ function mergeColumns(existing, incoming) {
 const TABLE_PAGE_SIZE = 100;
 
 function renderEntitiesTable() {
-  els.entitiesHeadRow.replaceChildren(...tableColumns.map(renderEntityHeader));
-  els.entitiesBody.replaceChildren(...tableRows.map(renderEntityRow));
+  // Hiding the column is only a courtesy: the server refuses the delete on a read-only connection anyway.
+  const canWrite = connection && !connection.readOnly;
+
+  els.entitiesHeadRow.replaceChildren(
+    ...tableColumns.map(renderEntityHeader),
+    ...(canWrite ? [actionsHeader()] : []),
+  );
+  els.entitiesBody.replaceChildren(...tableRows.map((row) => renderEntityRow(row, canWrite)));
 
   els.tableListing.hidden = tableRows.length === 0;
   els.loadMoreBar.hidden = tableRows.length === 0;
@@ -963,6 +996,12 @@ function renderEntityHeader(column) {
   return th;
 }
 
+function actionsHeader() {
+  const th = el('th', 'col-actions');
+  th.append(el('span', 'sr-only', 'Actions'));
+  return th;
+}
+
 // The server sends only the column names, not their type: this looks at the values loaded so far for one that says
 // it (any row's is good enough, since a column that mixes types is not something this explorer tries to represent).
 function inferColumnType(column) {
@@ -978,9 +1017,24 @@ function inferColumnType(column) {
   return 'string';
 }
 
-function renderEntityRow(row) {
+function renderEntityRow(row, canWrite) {
   const tr = el('tr');
   tr.append(...tableColumns.map((column) => renderEntityCell(column, row)));
+
+  if (canWrite) {
+    const actions = el('td');
+    const group = el('div', 'row-actions');
+    const deleteButton = el('button', 'icon-button danger');
+    deleteButton.type = 'button';
+    deleteButton.title = 'Delete entity';
+    deleteButton.setAttribute('aria-label', `Delete entity ${row.PartitionKey}/${row.RowKey}`);
+    deleteButton.append(icon('trash'));
+    deleteButton.addEventListener('click', () => deleteEntity(activeTable, row.PartitionKey, row.RowKey));
+    group.append(deleteButton);
+    actions.append(group);
+    tr.append(actions);
+  }
+
   return tr;
 }
 
@@ -1100,24 +1154,35 @@ async function loadTables() {
 
 // --- Actions -------------------------------------------------------------------
 
-// Asks before a delete. On an account that is not on this machine the name of the blob must be typed as well.
-function confirmDelete(container, entry) {
+// Asks before a destructive action, with details specific to what is being acted on. On an account that is not on
+// this machine, confirmText must be typed as well.
+function confirmAction({ title, localWarning, remoteWarning, details, submitLabel, confirmText }) {
   const remote = connection != null && !connection.isLocal;
-  const fileName = entry.path.slice(entry.path.lastIndexOf('/') + 1);
 
-  els.confirmText.textContent = remote
-    ? 'It will be removed from an account that is not on this machine. This cannot be undone.'
-    : 'It will be removed from the account below. This cannot be undone.';
+  els.confirmTitle.textContent = title;
+  els.confirmText.textContent = remote ? remoteWarning : localWarning;
 
+  const accountValue = el('dd');
   const account = el('span', undefined, connection?.accountName ?? '');
-  els.confirmAccount.replaceChildren(...(remote ? [account, el('span', 'tag', 'Remote')] : [account]));
-  els.confirmContainer.textContent = container;
-  els.confirmBlob.textContent = entry.path;
-  els.confirmSize.textContent = formatSize(entry.size);
+  accountValue.replaceChildren(...(remote ? [account, el('span', 'tag', 'Remote')] : [account]));
 
-  requiredName = remote ? fileName : '';
+  const detailRow = (term, value) => {
+    const row = el('div');
+    const valueNode = typeof value === 'string' ? el('dd', undefined, value) : value;
+    row.append(el('dt', undefined, term), valueNode);
+    return row;
+  };
+
+  els.confirmDetails.replaceChildren(
+    detailRow('Account', accountValue),
+    ...details.map(([term, value]) => detailRow(term, value)),
+  );
+
+  els.confirmSubmit.textContent = submitLabel;
+
+  requiredName = remote ? confirmText : '';
   els.confirmNameField.hidden = !remote;
-  els.confirmNameHint.textContent = fileName;
+  els.confirmNameHint.textContent = confirmText;
   els.confirmName.value = '';
   els.confirmSubmit.disabled = remote;
 
@@ -1131,7 +1196,15 @@ function confirmDelete(container, entry) {
 }
 
 async function deleteBlob(container, entry) {
-  const confirmed = await confirmDelete(container, entry);
+  const fileName = entry.path.slice(entry.path.lastIndexOf('/') + 1);
+  const confirmed = await confirmAction({
+    title: 'Delete this blob permanently?',
+    localWarning: 'It will be removed from the account below. This cannot be undone.',
+    remoteWarning: 'It will be removed from an account that is not on this machine. This cannot be undone.',
+    details: [['Container', container], ['Blob', entry.path], ['Size', formatSize(entry.size)]],
+    submitLabel: 'Delete permanently',
+    confirmText: fileName,
+  });
   if (!confirmed) return;
 
   try {
@@ -1140,6 +1213,121 @@ async function deleteBlob(container, entry) {
     await render();
   } catch (error) {
     showMessage(`Could not delete "${entry.path}": ${error.message}`, true);
+  }
+}
+
+async function deleteQueue(name) {
+  const confirmed = await confirmAction({
+    title: 'Delete this queue permanently?',
+    localWarning: 'It will be removed from the account below, with every message in it. This cannot be undone.',
+    remoteWarning: 'It will be removed from an account that is not on this machine, with every message in it. This cannot be undone.',
+    details: [['Queue', name]],
+    submitLabel: 'Delete permanently',
+    confirmText: name,
+  });
+  if (!confirmed) return;
+
+  try {
+    await api(queueUrl(name), { method: 'DELETE', headers: REQUEST_HEADERS });
+    setStatus(`Deleted queue ${name}`);
+    // The list itself, not just the active queue's messages, needs reloading: render() alone would still show the
+    // queue just deleted, since it only re-renders the sidebar from what loadQueues() last fetched.
+    if (name === activeQueue) location.hash = hashForQueue();
+    await refresh();
+  } catch (error) {
+    showMessage(`Could not delete queue "${name}": ${error.message}`, true);
+  }
+}
+
+async function clearQueue(name) {
+  const count = queues.find((q) => q.name === name)?.approximateMessageCount ?? 0;
+  const confirmed = await confirmAction({
+    title: 'Clear this queue permanently?',
+    localWarning: 'Every message in it will be removed, including ones not shown here. This cannot be undone.',
+    remoteWarning:
+      'Every message in it will be removed, including ones not shown here, on an account that is not on this ' +
+      'machine. This cannot be undone.',
+    details: [['Queue', name], ['Messages', plural(count, 'message')]],
+    submitLabel: 'Clear queue',
+    confirmText: name,
+  });
+  if (!confirmed) return;
+
+  try {
+    await api(queueMessagesUrl(name), { method: 'DELETE', headers: REQUEST_HEADERS });
+    setStatus(`Cleared queue ${name}`);
+    // The sidebar's message count badge is stale otherwise: it only updates on the next loadQueues(), not on render().
+    await refresh();
+  } catch (error) {
+    showMessage(`Could not clear queue "${name}": ${error.message}`, true);
+  }
+}
+
+async function deletePeekedMessages(name) {
+  const count = queueMessages?.length ?? 0;
+  const confirmed = await confirmAction({
+    title: 'Delete the peeked messages?',
+    localWarning: 'Only what is shown here will be removed; anything further back in the queue is left alone. This cannot be undone.',
+    remoteWarning:
+      'Only what is shown here will be removed; anything further back in the queue is left alone, on an account ' +
+      'that is not on this machine. This cannot be undone.',
+    details: [['Queue', name], ['Messages', plural(count, 'message')]],
+    submitLabel: 'Delete peeked messages',
+    confirmText: name,
+  });
+  if (!confirmed) return;
+
+  try {
+    const response = await api(queuePeekedMessagesUrl(name), { method: 'DELETE', headers: REQUEST_HEADERS });
+    const { deleted } = await response.json();
+    setStatus(`Deleted ${plural(deleted, 'message')} from ${name}`);
+    // The sidebar's message count badge is stale otherwise: it only updates on the next loadQueues(), not on render().
+    await refresh();
+  } catch (error) {
+    showMessage(`Could not delete the peeked messages of "${name}": ${error.message}`, true);
+  }
+}
+
+async function deleteTable(name) {
+  const confirmed = await confirmAction({
+    title: 'Delete this table permanently?',
+    localWarning: 'It will be removed from the account below, with every entity in it. This cannot be undone.',
+    remoteWarning: 'It will be removed from an account that is not on this machine, with every entity in it. This cannot be undone.',
+    details: [['Table', name]],
+    submitLabel: 'Delete permanently',
+    confirmText: name,
+  });
+  if (!confirmed) return;
+
+  try {
+    await api(tableUrl(name), { method: 'DELETE', headers: REQUEST_HEADERS });
+    setStatus(`Deleted table ${name}`);
+    // The list itself, not just the active table's entities, needs reloading: render() alone would still show the
+    // table just deleted, since it only re-renders the sidebar from what loadTables() last fetched.
+    if (name === activeTable) location.hash = hashForTable();
+    await refresh();
+  } catch (error) {
+    showMessage(`Could not delete table "${name}": ${error.message}`, true);
+  }
+}
+
+async function deleteEntity(table, partitionKey, rowKey) {
+  const confirmed = await confirmAction({
+    title: 'Delete this entity permanently?',
+    localWarning: 'It will be removed from the account below. This cannot be undone.',
+    remoteWarning: 'It will be removed from an account that is not on this machine. This cannot be undone.',
+    details: [['Table', table], ['Partition Key', partitionKey], ['Row Key', rowKey]],
+    submitLabel: 'Delete permanently',
+    confirmText: rowKey,
+  });
+  if (!confirmed) return;
+
+  try {
+    await api(entityUrl(table, partitionKey, rowKey), { method: 'DELETE', headers: REQUEST_HEADERS });
+    setStatus(`Deleted entity ${partitionKey}/${rowKey}`);
+    await render();
+  } catch (error) {
+    showMessage(`Could not delete the entity: ${error.message}`, true);
   }
 }
 
@@ -1418,6 +1606,8 @@ for (const button of els.serviceButtons) {
 }
 
 els.queueFilter.addEventListener('input', renderQueueMessages);
+els.deletePeekedMessages.addEventListener('click', () => { if (activeQueue) deletePeekedMessages(activeQueue); });
+els.clearQueue.addEventListener('click', () => { if (activeQueue) clearQueue(activeQueue); });
 
 els.tableToolbar.addEventListener('submit', (event) => {
   event.preventDefault();

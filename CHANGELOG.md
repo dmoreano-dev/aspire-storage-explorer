@@ -6,6 +6,29 @@ the date when you tag.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-28
+
+### Added
+
+- Destructive actions for Queues and Tables, all behind the same guards as blob delete
+  (`RequireExplorerHeaderFilter` and `RequireWritableFilter`):
+  - **Delete queue** and **delete table**, from the sidebar row on hover.
+  - **Clear queue**, next to the peeked messages, which removes every message in the queue, including ones beyond
+    the 32-message peek window.
+  - **Delete peeked messages**, which removes only what is currently peeked (up to 32). The backlog originally asked
+    for deleting a single message, but that requires receiving it first (peeking never returns a pop receipt), and
+    receiving cannot target one specific message — only "whatever's at the front, up to N." Deleting one message
+    that way would have raised the `DequeueCount` of every other message pulled into that batch, even though it was
+    put right back untouched. Deleting the whole peeked batch instead removes that side effect entirely, since
+    nothing is received and then released — only received and then deleted. To guard against the batch drifting from
+    what was last shown on screen (`Receive` and `Peek` are independent calls, and Azure does not guarantee they see
+    the same messages if the queue is being used by something else), the server peeks again immediately before
+    receiving and only deletes a message confirmed present by that fresh peek, releasing anything else received
+    unharmed.
+  - **Delete entity**, from its row in the entity table.
+- The confirm dialog (previously blob-only) is now generic: title, warning text and details vary by action, but the
+  remote-account "type the name to confirm" behavior is unchanged.
+
 ## [0.6.0] - 2026-09-27
 
 ### Added

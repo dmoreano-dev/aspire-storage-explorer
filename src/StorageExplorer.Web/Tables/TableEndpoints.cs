@@ -1,3 +1,5 @@
+using StorageExplorer.Web.Endpoints;
+
 namespace StorageExplorer.Web.Tables;
 
 internal static class TableEndpoints
@@ -24,6 +26,34 @@ internal static class TableEndpoints
             connection.Table is null
                 ? NoTableEndpoint()
                 : Results.Ok(await explorer.QueryEntitiesAsync(table, filter, continuationToken, cancellationToken)));
+
+        api.MapDelete("/{table}", async (
+                string table,
+                IStorageConnection connection,
+                ITableExplorerService explorer,
+                CancellationToken cancellationToken) =>
+                {
+                    if (connection.Table is null) return NoTableEndpoint();
+                    await explorer.DeleteTableAsync(table, cancellationToken);
+                    return Results.NoContent();
+                })
+            .AddEndpointFilter<RequireExplorerHeaderFilter>()
+            .AddEndpointFilter<RequireWritableFilter>();
+
+        api.MapDelete("/{table}/entities", async (
+                string table,
+                string partitionKey,
+                string rowKey,
+                IStorageConnection connection,
+                ITableExplorerService explorer,
+                CancellationToken cancellationToken) =>
+                {
+                    if (connection.Table is null) return NoTableEndpoint();
+                    await explorer.DeleteEntityAsync(table, partitionKey, rowKey, cancellationToken);
+                    return Results.NoContent();
+                })
+            .AddEndpointFilter<RequireExplorerHeaderFilter>()
+            .AddEndpointFilter<RequireWritableFilter>();
 
         return app;
     }

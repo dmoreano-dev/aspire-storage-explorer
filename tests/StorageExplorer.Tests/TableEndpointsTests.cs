@@ -99,6 +99,90 @@ public class TableEndpointsTests
         Assert.Empty(host.Tables.Calls);
     }
 
+    // ---- delete table ----
+
+    [Fact]
+    public async Task DeleteTable_ReturnsNoContent()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Connection.Table = new TableServiceClient(TestConnectionStrings.Local);
+        var request = host.Request(HttpMethod.Delete, "/api/tables/widgets");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(["deleteTable:widgets"], host.Tables.Calls);
+    }
+
+    [Fact]
+    public async Task DeleteTable_NoTableEndpoint_ReturnsBadRequestWithoutCallingTheService()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        var request = host.Request(HttpMethod.Delete, "/api/tables/widgets");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("No table endpoint", (await Json(response)).GetProperty("title").GetString());
+        Assert.Empty(host.Tables.Calls);
+    }
+
+    // ---- delete entity ----
+
+    [Fact]
+    public async Task DeleteEntity_ReturnsNoContent()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Connection.Table = new TableServiceClient(TestConnectionStrings.Local);
+        var request = host.Request(HttpMethod.Delete, "/api/tables/widgets/entities?partitionKey=a&rowKey=1");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(["deleteEntity:widgets:a:1"], host.Tables.Calls);
+    }
+
+    [Fact]
+    public async Task DeleteEntity_EmptyRowKey_PassesItThrough()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Connection.Table = new TableServiceClient(TestConnectionStrings.Local);
+        var request = host.Request(HttpMethod.Delete, "/api/tables/widgets/entities?partitionKey=a&rowKey=");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(["deleteEntity:widgets:a:"], host.Tables.Calls);
+    }
+
+    [Fact]
+    public async Task DeleteEntity_NoTableEndpoint_ReturnsBadRequestWithoutCallingTheService()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        var request = host.Request(HttpMethod.Delete, "/api/tables/widgets/entities?partitionKey=a&rowKey=1");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("No table endpoint", (await Json(response)).GetProperty("title").GetString());
+        Assert.Empty(host.Tables.Calls);
+    }
+
     // ---- these routes never change data, so the read-only guards do not apply to them ----
 
     [Fact]

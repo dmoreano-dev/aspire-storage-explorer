@@ -140,4 +140,100 @@ public sealed class QueueExplorerServiceTests(AzuriteFixture azurite) : IAsyncLi
         Assert.Equal(404, actual.Status);
         Assert.Equal("QueueNotFound", actual.ErrorCode);
     }
+
+    // ---- delete queue ----
+
+    [Fact]
+    public async Task DeleteQueueAsync_ExistingQueue_ReturnsTrueAndDeletesIt()
+    {
+        // Act
+        var actual = await service.DeleteQueueAsync(queue.Name, default);
+
+        // Assert
+        Assert.True(actual);
+        await Assert.ThrowsAsync<RequestFailedException>(() => service.PeekMessagesAsync(queue.Name, default));
+    }
+
+    [Fact]
+    public async Task DeleteQueueAsync_MissingQueue_ReturnsFalse()
+    {
+        // Act
+        var actual = await service.DeleteQueueAsync("no-such-queue", default);
+
+        // Assert
+        Assert.False(actual);
+    }
+
+    // ---- clear queue ----
+
+    [Fact]
+    public async Task ClearQueueAsync_QueueWithMessages_RemovesAllOfThem()
+    {
+        // Arrange
+        for (var i = 0; i < QueueExplorerService.MaxPeekedMessages + 5; i++)
+            await queue.SendAsync($"message {i}");
+
+        // Act
+        await service.ClearQueueAsync(queue.Name, default);
+
+        // Assert
+        Assert.Empty(await service.PeekMessagesAsync(queue.Name, default));
+    }
+
+    [Fact]
+    public async Task ClearQueueAsync_MissingQueue_ThrowsQueueNotFound()
+    {
+        // Act
+        var actual = await Assert.ThrowsAsync<RequestFailedException>(() =>
+            service.ClearQueueAsync("no-such-queue", default));
+
+        // Assert
+        Assert.Equal(404, actual.Status);
+        Assert.Equal("QueueNotFound", actual.ErrorCode);
+    }
+
+    // ---- delete peeked messages ----
+
+    [Fact]
+    public async Task DeletePeekedMessagesAsync_FewerThanTheMax_DeletesAllOfThemAndReturnsTheCount()
+    {
+        // Arrange
+        await queue.SendAsync("a");
+        await queue.SendAsync("b");
+        await queue.SendAsync("c");
+
+        // Act
+        var actual = await service.DeletePeekedMessagesAsync(queue.Name, default);
+
+        // Assert
+        Assert.Equal(3, actual);
+        Assert.Empty(await service.PeekMessagesAsync(queue.Name, default));
+    }
+
+    [Fact]
+    public async Task DeletePeekedMessagesAsync_MoreThanTheMax_DeletesOnlyTheFrontBatchAndLeavesTheRest()
+    {
+        // Arrange
+        var total = QueueExplorerService.MaxPeekedMessages + 5;
+        for (var i = 0; i < total; i++)
+            await queue.SendAsync($"message {i}");
+
+        // Act
+        var actual = await service.DeletePeekedMessagesAsync(queue.Name, default);
+
+        // Assert
+        Assert.Equal(QueueExplorerService.MaxPeekedMessages, actual);
+        var listed = Assert.Single(await service.ListQueuesAsync(default), q => q.Name == queue.Name);
+        Assert.Equal(5, listed.ApproximateMessageCount);
+    }
+
+    [Fact]
+    public async Task DeletePeekedMessagesAsync_EmptyQueue_ReturnsZero()
+    {
+        // Act
+        var actual = await service.DeletePeekedMessagesAsync(queue.Name, default);
+
+        // Assert
+        Assert.Equal(0, actual);
+    }
 }

@@ -167,6 +167,71 @@ public sealed class TableExplorerServiceTests(AzuriteFixture azurite) : IAsyncLi
         Assert.DoesNotContain(actual.Entities, entity => first.Entities.Any(f => Equals(f["RowKey"], entity["RowKey"])));
     }
 
+    // ---- delete table ----
+
+    [Fact]
+    public async Task DeleteTableAsync_ExistingTable_DeletesIt()
+    {
+        // Act
+        await service.DeleteTableAsync(table.Name, default);
+
+        // Assert
+        Assert.DoesNotContain(await service.ListTablesAsync(default), t => t.Name == table.Name);
+    }
+
+    [Fact]
+    public async Task DeleteTableAsync_MissingTable_ThrowsRequestFailedException()
+    {
+        // Act
+        // Azurite answers with a plain 400 and no error code (real Azure answers 404 TableNotFound instead), the same
+        // quirk QueryEntitiesAsync_MissingTable_ThrowsRequestFailedException already documents for this table.
+        var actual = await Assert.ThrowsAsync<RequestFailedException>(() =>
+            service.DeleteTableAsync("no-such-table", default));
+
+        // Assert
+        Assert.Equal(400, actual.Status);
+    }
+
+    // ---- delete entity ----
+
+    [Fact]
+    public async Task DeleteEntityAsync_ExistingEntity_RemovesOnlyThatOne()
+    {
+        // Arrange
+        await table.AddAsync(new TableEntity("a", "1") { { "Name", "Keep" } });
+        await table.AddAsync(new TableEntity("a", "2") { { "Name", "Delete me" } });
+
+        // Act
+        await service.DeleteEntityAsync(table.Name, "a", "2", default);
+
+        // Assert
+        var actual = await service.QueryEntitiesAsync(table.Name, null, null, default);
+        var remaining = Assert.Single(actual.Entities);
+        Assert.Equal("Keep", remaining["Name"]);
+    }
+
+    [Fact]
+    public async Task DeleteEntityAsync_EmptyRowKey_DeletesIt()
+    {
+        // Arrange
+        await table.AddAsync(new TableEntity("a", ""));
+
+        // Act
+        await service.DeleteEntityAsync(table.Name, "a", "", default);
+
+        // Assert
+        Assert.Empty((await service.QueryEntitiesAsync(table.Name, null, null, default)).Entities);
+    }
+
+    [Fact]
+    public async Task DeleteEntityAsync_MissingEntity_CompletesWithoutThrowing()
+    {
+        // Act
+        // Unlike deleting a table, the SDK does not surface a missing entity as an error here (confirmed against a
+        // real Azurite): it treats the delete as already accomplished. Not throwing is the assertion.
+        await service.DeleteEntityAsync(table.Name, "no-such-partition", "no-such-row", default);
+    }
+
     // Filled once and only read: as many entities as one page plus a few, so a query needs two pages to see them all.
     private const int EntityCount = TableExplorerService.PageSize + 7;
 

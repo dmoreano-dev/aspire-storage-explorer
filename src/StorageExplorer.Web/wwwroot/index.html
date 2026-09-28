@@ -115,6 +115,8 @@
             <input id="queue-filter" type="search" placeholder="Search the peeked messages" aria-label="Search the peeked messages" autocomplete="off" spellcheck="false">
           </div>
           <span id="queue-filter-count" class="filter-count" role="status"></span>
+          <button id="delete-peeked-messages" class="outlined-button danger" type="button" hidden>Delete peeked messages</button>
+          <button id="clear-queue" class="outlined-button danger" type="button" hidden>Clear queue</button>
         </div>
 
         <div id="queue-note" class="note" hidden>
@@ -171,12 +173,7 @@
       <span class="dialog-icon"><i data-icon="trash"></i></span>
       <h2 id="confirm-title">Delete this blob permanently?</h2>
       <p id="confirm-text" class="hint"></p>
-      <dl class="details">
-        <div><dt>Account</dt><dd id="confirm-account"></dd></div>
-        <div><dt>Container</dt><dd id="confirm-container"></dd></div>
-        <div><dt>Blob</dt><dd id="confirm-blob"></dd></div>
-        <div><dt>Size</dt><dd id="confirm-size"></dd></div>
-      </dl>
+      <dl id="confirm-details" class="details"></dl>
       <div id="confirm-name-field" class="field" hidden>
         <label for="confirm-name">Type <code id="confirm-name-hint"></code> to confirm</label>
         <input id="confirm-name" type="text" autocomplete="off" spellcheck="false">

@@ -87,6 +87,125 @@ public class QueueEndpointsTests
         Assert.Empty(host.Queues.Calls);
     }
 
+    // ---- delete queue ----
+
+    [Fact]
+    public async Task DeleteQueue_ExistingQueue_ReturnsNoContent()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Connection.Queue = new QueueServiceClient(TestConnectionStrings.Local);
+        var request = host.Request(HttpMethod.Delete, "/api/queues/orders");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(["deleteQueue:orders"], host.Queues.Calls);
+    }
+
+    [Fact]
+    public async Task DeleteQueue_MissingQueue_ReturnsNotFound()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Connection.Queue = new QueueServiceClient(TestConnectionStrings.Local);
+        host.Queues.DeleteQueueResult = false;
+        var request = host.Request(HttpMethod.Delete, "/api/queues/orders");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteQueue_NoQueueEndpoint_ReturnsBadRequestWithoutCallingTheService()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        var request = host.Request(HttpMethod.Delete, "/api/queues/orders");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("No queue endpoint", (await Json(response)).GetProperty("title").GetString());
+        Assert.Empty(host.Queues.Calls);
+    }
+
+    // ---- clear queue ----
+
+    [Fact]
+    public async Task ClearQueue_ReturnsNoContent()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Connection.Queue = new QueueServiceClient(TestConnectionStrings.Local);
+        var request = host.Request(HttpMethod.Delete, "/api/queues/orders/messages");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(["clearQueue:orders"], host.Queues.Calls);
+    }
+
+    [Fact]
+    public async Task ClearQueue_NoQueueEndpoint_ReturnsBadRequestWithoutCallingTheService()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        var request = host.Request(HttpMethod.Delete, "/api/queues/orders/messages");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(host.Queues.Calls);
+    }
+
+    // ---- delete peeked messages ----
+
+    [Fact]
+    public async Task DeletePeekedMessages_ReturnsHowManyWereDeleted()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Connection.Queue = new QueueServiceClient(TestConnectionStrings.Local);
+        host.Queues.DeletedPeekedCount = 5;
+        var request = host.Request(HttpMethod.Delete, "/api/queues/orders/messages/peeked");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+        var actual = await Json(response);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(["deletePeeked:orders"], host.Queues.Calls);
+        Assert.Equal(5, actual.GetProperty("deleted").GetInt32());
+    }
+
+    [Fact]
+    public async Task DeletePeekedMessages_NoQueueEndpoint_ReturnsBadRequestWithoutCallingTheService()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        var request = host.Request(HttpMethod.Delete, "/api/queues/orders/messages/peeked");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(host.Queues.Calls);
+    }
+
     // ---- these routes never change data, so the read-only guards do not apply to them ----
 
     [Fact]
