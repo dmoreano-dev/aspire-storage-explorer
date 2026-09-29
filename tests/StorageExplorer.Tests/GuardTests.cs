@@ -214,6 +214,7 @@ public class GuardTests
                 "POST /api/blobs/containers/x/blob",
                 "POST /api/blobs/containers/x/folder",
                 "POST /api/queues/x",
+                "POST /api/queues/x/messages",
                 "POST /api/tables/x",
                 "PUT /api/connection",
             ],

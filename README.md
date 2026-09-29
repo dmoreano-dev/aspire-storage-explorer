@@ -9,11 +9,13 @@ explorer.
 **Features:** list and search containers, navigate folders with a breadcrumb, list blobs (name, size, content type,
 last modified), search them by name in a folder and everything below it or in the whole container, sort by any column,
 download a blob, preview an image, PDF, JSON or text blob inline, and delete a blob after a confirmation that names
-the account (on an account that is not on your machine you also type the name of the blob). Deleting is only enabled for local endpoints unless you say otherwise (see
-[Read-only](#read-only)). Queues and tables are read-only for now: list queues with their message count and peek up to
-32 messages (ones written Base64-encoded are decoded automatically); list tables and query their entities with an
-OData filter, dynamic columns and paging. A **Blobs | Queues | Tables** switch above the list picks which one you're
-browsing, showing only the services the connected account has.
+the account (on an account that is not on your machine you also type the name of the blob). Upload with drag and
+drop, and create containers and folders. Deleting and other changes are only enabled for local endpoints unless you
+say otherwise (see [Read-only](#read-only)). Queues: list them with their message count, peek up to 32 messages
+(ones written Base64-encoded are decoded automatically), send a new message, and clear or delete a queue. Tables:
+list them and query their entities with an OData filter, dynamic columns and paging, and delete an entity or a
+table. A **Blobs | Queues | Tables** switch above the list picks which one you're browsing, showing only the
+services the connected account has.
 
 **Requirements:** .NET 10, Aspire 13.1 or later and Docker (the explorer runs as a container next to the emulator).
 Keep every `Aspire.*` package of your AppHost at the same version as its SDK (`Aspire.AppHost.Sdk`): mixing versions
@@ -136,16 +138,18 @@ first; it gets the same tag the extension uses, so the sample runs it:
 ## Limitations
 
 - No file shares.
-- Queues and tables are read-only: no deleting a message, clearing or deleting a queue, or deleting an entity or a
-  table yet. Peeking a queue reads up to 32 messages; querying a table reads up to 100 entities a page, with
+- Peeking a queue reads up to 32 messages at a time; querying a table reads up to 100 entities a page, with
   **Load more** for the rest.
+- Queue messages can only be deleted as the whole peeked batch (**Delete peeked messages**) or the whole queue
+  (**Clear queue**), not one message by id: peeking never returns the pop receipt a single-message delete needs.
+- Tables can be queried and their entities deleted, but there is no way to add or edit an entity yet.
 - Each blob folder listing is capped at 5,000 entries.
 - Azure can only filter blobs by prefix, so a search reads the listing and filters it: it stops after 50,000 blobs or
   5,000 matches, and the page tells you when it did.
 - Keep the storage resource on `RunAsEmulator()`. Without it Aspire provisions Azure resources and the explorer waits
   for them.
 - Only account connection strings with a key work; Entra ID is not supported yet.
-- Only single blobs can be deleted, not folders.
+- Containers can be created but not deleted.
 
 ## Repository layout
 

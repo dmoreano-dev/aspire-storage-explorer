@@ -79,6 +79,12 @@
               </button>
               <input id="upload-input" type="file" multiple hidden>
             </div>
+            <div id="queue-actions" class="blob-actions" hidden>
+              <button id="send-message-button" class="upload-button" type="button">
+                <i data-icon="send"></i>
+                Send message
+              </button>
+            </div>
           </div>
         </div>
 
@@ -244,6 +250,22 @@
       <menu>
         <button id="prompt-cancel" type="button">Cancel</button>
         <button id="prompt-submit" type="submit" class="primary"></button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="send-message-dialog" aria-labelledby="send-message-title">
+    <form id="send-message-form">
+      <h2 id="send-message-title">Send a message</h2>
+      <p class="hint">Sent exactly as typed, with no encoding applied.</p>
+      <div class="field">
+        <label for="send-message-text">Message text</label>
+        <textarea id="send-message-text" rows="6" autocomplete="off" spellcheck="false" required></textarea>
+      </div>
+      <p id="send-message-error" class="message error" role="alert" hidden></p>
+      <menu>
+        <button id="send-message-cancel" type="button">Cancel</button>
+        <button id="send-message-submit" type="submit" class="primary">Send</button>
       </menu>
     </form>
   </dialog>

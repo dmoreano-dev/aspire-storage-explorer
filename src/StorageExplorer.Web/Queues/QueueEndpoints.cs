@@ -38,6 +38,25 @@ internal static class QueueEndpoints
                 ? NoQueueEndpoint()
                 : Results.Ok(await explorer.PeekMessagesAsync(queue, cancellationToken)));
 
+        // Mirrors blob upload: the message text is the raw request body, not a JSON-wrapped field.
+        api.MapPost("/{queue}/messages", async (
+                string queue,
+                HttpRequest request,
+                IStorageConnection connection,
+                IQueueExplorerService explorer,
+                CancellationToken cancellationToken) =>
+                {
+                    if (connection.Queue is null) return NoQueueEndpoint();
+
+                    using var reader = new StreamReader(request.Body);
+                    var text = await reader.ReadToEndAsync(cancellationToken);
+
+                    await explorer.SendMessageAsync(queue, text, cancellationToken);
+                    return Results.NoContent();
+                })
+            .AddEndpointFilter<RequireExplorerHeaderFilter>()
+            .AddEndpointFilter<RequireWritableFilter>();
+
         api.MapDelete("/{queue}", async (
                 string queue,
                 IStorageConnection connection,

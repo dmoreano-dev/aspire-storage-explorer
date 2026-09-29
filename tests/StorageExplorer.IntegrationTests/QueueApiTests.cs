@@ -80,6 +80,38 @@ public sealed class QueueApiTests(AzuriteFixture azurite) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PostMessage_Text_EnqueuesItAndShowsUpInPeek()
+    {
+        // Arrange
+        using var client = Start();
+        var request = WithHeader(HttpMethod.Post, $"/api/queues/{queue.Name}/messages");
+        request.Content = new StringContent("a brand new message");
+
+        // Act
+        var response = await client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var messages = await client.GetFromJsonAsync<JsonElement>($"/api/queues/{queue.Name}/messages");
+        Assert.Contains(messages.EnumerateArray(), m => m.GetProperty("text").GetString() == "a brand new message");
+    }
+
+    [Fact]
+    public async Task PostMessage_WithoutExplorerHeader_SendsNothing()
+    {
+        // Arrange
+        using var client = Start();
+
+        // Act
+        var response = await client.PostAsync($"/api/queues/{queue.Name}/messages", new StringContent("should not land"));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var messages = await client.GetFromJsonAsync<JsonElement>($"/api/queues/{queue.Name}/messages");
+        Assert.DoesNotContain(messages.EnumerateArray(), m => m.GetProperty("text").GetString() == "should not land");
+    }
+
+    [Fact]
     public async Task DeleteQueue_ExistingQueue_ReturnsNoContentAndRemovesIt()
     {
         // Arrange

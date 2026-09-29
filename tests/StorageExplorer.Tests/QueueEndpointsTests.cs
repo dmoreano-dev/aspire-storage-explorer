@@ -121,6 +121,42 @@ public class QueueEndpointsTests
         Assert.Empty(host.Queues.Calls);
     }
 
+    // ---- send message ----
+
+    [Fact]
+    public async Task PostMessage_Content_SendsItAndReturnsNoContent()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Connection.Queue = new QueueServiceClient(TestConnectionStrings.Local);
+        var request = host.Request(HttpMethod.Post, "/api/queues/orders/messages");
+        request.Content = new StringContent("hello world");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(["sendMessage:orders:hello world"], host.Queues.Calls);
+    }
+
+    [Fact]
+    public async Task PostMessage_NoQueueEndpoint_ReturnsBadRequestWithoutCallingTheService()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        var request = host.Request(HttpMethod.Post, "/api/queues/orders/messages");
+        request.Content = new StringContent("hello world");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("No queue endpoint", (await Json(response)).GetProperty("title").GetString());
+        Assert.Empty(host.Queues.Calls);
+    }
+
     // ---- delete queue ----
 
     [Fact]

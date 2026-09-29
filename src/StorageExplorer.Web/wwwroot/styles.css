@@ -683,8 +683,7 @@ dialog label.inline { display: flex; align-items: center; gap: 6px; color: var(-
 dialog .field { display: grid; gap: 8px; }
 dialog .field label { color: var(--muted); font-size: 13px; }
 dialog code { color: var(--text); font-family: var(--mono); }
-dialog input[type="password"], dialog input[type="text"] {
-  height: 38px;
+dialog input[type="password"], dialog input[type="text"], dialog textarea {
   padding: 0 12px;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
@@ -692,7 +691,9 @@ dialog input[type="password"], dialog input[type="text"] {
   color: inherit;
   font: 13px var(--mono);
 }
-dialog input:focus-visible { border-color: var(--accent); outline: 0; }
+dialog input[type="password"], dialog input[type="text"] { height: 38px; }
+dialog textarea { padding: 10px 12px; resize: vertical; }
+dialog input:focus-visible, dialog textarea:focus-visible { border-color: var(--accent); outline: 0; }
 
 .dialog-icon {
   display: grid;

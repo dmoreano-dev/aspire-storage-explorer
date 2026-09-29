@@ -37,6 +37,13 @@ internal interface IQueueExplorerService
     /// matches what is given here (none, since this never sets any), only throwing when it differs.
     /// </summary>
     Task CreateQueueAsync(string queue, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Enqueues <paramref name="text"/> exactly as given, with no encoding applied: this explorer reads queues the
+    /// same way (see <see cref="QueueMessage.Text"/>), so a plain message sent here round-trips as plain text on the
+    /// next peek instead of showing up Base64-encoded.
+    /// </summary>
+    Task SendMessageAsync(string queue, string text, CancellationToken cancellationToken);
 }
 
 internal sealed class QueueExplorerService(IStorageConnection connection) : IQueueExplorerService
@@ -117,6 +124,9 @@ internal sealed class QueueExplorerService(IStorageConnection connection) : IQue
 
     public Task CreateQueueAsync(string queue, CancellationToken cancellationToken) =>
         connection.Queue!.GetQueueClient(queue).CreateAsync(cancellationToken: cancellationToken);
+
+    public Task SendMessageAsync(string queue, string text, CancellationToken cancellationToken) =>
+        connection.Queue!.GetQueueClient(queue).SendMessageAsync(text, cancellationToken);
 
     private static QueueMessage ToQueueMessage(PeekedMessage message)
     {

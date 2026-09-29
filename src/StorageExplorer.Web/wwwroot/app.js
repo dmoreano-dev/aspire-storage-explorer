@@ -31,6 +31,14 @@ const els = {
   uploadButton: document.getElementById('upload-button'),
   uploadInput: document.getElementById('upload-input'),
   dropOverlay: document.getElementById('drop-overlay'),
+  queueActions: document.getElementById('queue-actions'),
+  sendMessageButton: document.getElementById('send-message-button'),
+  sendMessageDialog: document.getElementById('send-message-dialog'),
+  sendMessageForm: document.getElementById('send-message-form'),
+  sendMessageText: document.getElementById('send-message-text'),
+  sendMessageError: document.getElementById('send-message-error'),
+  sendMessageCancel: document.getElementById('send-message-cancel'),
+  sendMessageSubmit: document.getElementById('send-message-submit'),
   queueToolbar: document.getElementById('queue-toolbar'),
   queueFilter: document.getElementById('queue-filter'),
   queueFilterCount: document.getElementById('queue-filter-count'),
@@ -181,6 +189,7 @@ const ICONS = {
   eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>',
   upload: '<path d="M12 20V9"/><path d="m7 13 5-5 5 5"/><path d="M5 4h14"/>',
   plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+  send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
 };
 
 function icon(name) {
@@ -768,6 +777,7 @@ async function render() {
     els.queueListing.hidden = true;
     els.queueToolbar.hidden = true;
     els.queueNote.hidden = true;
+    els.queueActions.hidden = true;
   }
   if (service !== 'tables') {
     els.tableListing.hidden = true;
@@ -844,6 +854,8 @@ async function renderQueuesView(queue) {
 
   renderSidebarList(activeQueue);
   renderQueueLocation(activeQueue);
+  // Hiding the button is only a courtesy: the server refuses the send on a read-only connection anyway.
+  els.queueActions.hidden = !(activeQueue && connection && !connection.readOnly);
 
   if (!activeQueue) {
     els.queueToolbar.hidden = true;
@@ -1564,6 +1576,17 @@ async function deletePeekedMessages(name) {
   }
 }
 
+// Mirrors uploadFiles: the raw text is the request body, not a JSON-wrapped field.
+async function sendMessage(queue, text) {
+  await api(queueMessagesUrl(queue), {
+    method: 'POST',
+    headers: { ...REQUEST_HEADERS, 'Content-Type': 'text/plain' },
+    body: text,
+  });
+  setStatus(`Sent a message to ${queue}`);
+  await refresh();
+}
+
 async function deleteTable(name) {
   const confirmed = await confirmAction({
     title: 'Delete this table permanently?',
@@ -1898,6 +1921,49 @@ for (const button of els.serviceButtons) {
 els.queueFilter.addEventListener('input', renderQueueMessages);
 els.deletePeekedMessages.addEventListener('click', () => { if (activeQueue) deletePeekedMessages(activeQueue); });
 els.clearQueue.addEventListener('click', () => { if (activeQueue) clearQueue(activeQueue); });
+
+// --- Send a queue message ---------------------------------------------------
+// A dedicated dialog rather than the generic name prompt above: a message body can be long and multi-line, which a
+// single-line <input> cannot hold.
+
+function showSendMessageError(text) {
+  els.sendMessageError.hidden = !text;
+  els.sendMessageError.textContent = text ?? '';
+}
+
+function setSendMessageBusy(busy) {
+  els.sendMessageSubmit.disabled = busy;
+  els.sendMessageCancel.disabled = busy;
+  els.sendMessageSubmit.textContent = busy ? 'Sending…' : 'Send';
+}
+
+els.sendMessageButton.addEventListener('click', () => {
+  if (!activeQueue) return;
+  els.sendMessageText.value = '';
+  showSendMessageError('');
+  setSendMessageBusy(false);
+  els.sendMessageDialog.showModal();
+  els.sendMessageText.focus();
+});
+
+els.sendMessageCancel.addEventListener('click', () => els.sendMessageDialog.close());
+els.sendMessageForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!activeQueue) return;
+  const text = els.sendMessageText.value;
+  if (!text) return;
+
+  setSendMessageBusy(true);
+  showSendMessageError('');
+  try {
+    await sendMessage(activeQueue, text);
+    els.sendMessageDialog.close();
+  } catch (error) {
+    showSendMessageError(error.message);
+  } finally {
+    setSendMessageBusy(false);
+  }
+});
 
 els.tableToolbar.addEventListener('submit', (event) => {
   event.preventDefault();

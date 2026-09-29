@@ -232,6 +232,9 @@ internal sealed class FakeQueueExplorerService : IQueueExplorerService
     public async Task CreateQueueAsync(string queue, CancellationToken cancellationToken) =>
         await Record($"createQueue:{queue}", true);
 
+    public async Task SendMessageAsync(string queue, string text, CancellationToken cancellationToken) =>
+        await Record($"sendMessage:{queue}:{text}", true);
+
     private Task<T> Record<T>(string call, T result)
     {
         Calls.Add(call);

@@ -237,6 +237,34 @@ public sealed class QueueExplorerServiceTests(AzuriteFixture azurite) : IAsyncLi
         Assert.Equal(0, actual);
     }
 
+    // ---- send message ----
+
+    [Fact]
+    public async Task SendMessageAsync_PlainText_EnqueuesItUnencodedAndPeekable()
+    {
+        // Act
+        await service.SendMessageAsync(queue.Name, "hello from the explorer", default);
+
+        // Assert
+        var actual = await service.PeekMessagesAsync(queue.Name, default);
+        var message = Assert.Single(actual);
+        Assert.Equal("hello from the explorer", message.Text);
+        Assert.False(message.TextWasBase64Decoded);
+        Assert.Equal("hello from the explorer", message.RawText);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_MissingQueue_ThrowsQueueNotFound()
+    {
+        // Act
+        var actual = await Assert.ThrowsAsync<RequestFailedException>(() =>
+            service.SendMessageAsync("no-such-queue", "hello", default));
+
+        // Assert
+        Assert.Equal(404, actual.Status);
+        Assert.Equal("QueueNotFound", actual.ErrorCode);
+    }
+
     // ---- create queue ----
 
     [Fact]

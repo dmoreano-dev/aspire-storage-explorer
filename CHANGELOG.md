@@ -8,6 +8,13 @@ the date when you tag.
 
 ### Added
 
+- Send a message to a queue, mirroring blob upload: a **Send message** button next to the queue title (visible
+  whenever a queue is selected, even an empty one, unlike the rest of the queue toolbar which only shows once there
+  is something to peek) opens a small dialog with a multi-line text box. New `POST /api/queues/{queue}/messages`,
+  behind the same `RequireExplorerHeaderFilter`/`RequireWritableFilter` guards as the other write actions. The
+  message text is the raw request body, the same way blob upload sends raw bytes rather than a JSON-wrapped field,
+  and it is enqueued exactly as typed with no encoding applied, matching how this explorer already reads queues
+  (`QueueExplorerService`'s Base64 decoding is best-effort on the way out, not something this applies going in).
 - Create queues and tables, mirroring container/folder creation: the same **New container** button next to the
   sidebar heading now reads **New queue** or **New table** on those services, opening the same name-only dialog. New
   endpoints `POST /api/queues/{queue}` and `POST /api/tables/{table}`, behind the same
