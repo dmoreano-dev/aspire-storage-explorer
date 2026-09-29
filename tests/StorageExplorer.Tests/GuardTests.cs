@@ -216,6 +216,7 @@ public class GuardTests
                 "POST /api/queues/x",
                 "POST /api/queues/x/messages",
                 "POST /api/tables/x",
+                "POST /api/tables/x/entities",
                 "PUT /api/connection",
             ],
             actual);

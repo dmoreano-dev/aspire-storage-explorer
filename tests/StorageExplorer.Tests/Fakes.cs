@@ -270,6 +270,10 @@ internal sealed class FakeTableExplorerService : ITableExplorerService
     public async Task CreateTableAsync(string table, CancellationToken cancellationToken) =>
         await Record($"createTable:{table}", true);
 
+    public async Task CreateEntityAsync(
+        string table, string partitionKey, string rowKey, IReadOnlyDictionary<string, object?> properties, CancellationToken cancellationToken) =>
+        await Record($"createEntity:{table}:{partitionKey}:{rowKey}:{string.Join(',', properties.Keys)}", true);
+
     private Task<T> Record<T>(string call, T result)
     {
         Calls.Add(call);

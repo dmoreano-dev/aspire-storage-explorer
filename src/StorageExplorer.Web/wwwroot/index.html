@@ -85,6 +85,12 @@
                 Send message
               </button>
             </div>
+            <div id="table-actions" class="blob-actions" hidden>
+              <button id="add-entity-button" class="upload-button" type="button">
+                <i data-icon="plus"></i>
+                Add entity
+              </button>
+            </div>
           </div>
         </div>
 
@@ -266,6 +272,36 @@
       <menu>
         <button id="send-message-cancel" type="button">Cancel</button>
         <button id="send-message-submit" type="submit" class="primary">Send</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="add-entity-dialog" aria-labelledby="add-entity-title">
+    <form id="add-entity-form">
+      <h2 id="add-entity-title">Add entity</h2>
+      <p class="hint">Tables have no fixed schema: name each property and pick its type.</p>
+      <div class="field-row">
+        <div class="field">
+          <label for="add-entity-partition-key">Partition key</label>
+          <input id="add-entity-partition-key" type="text" autocomplete="off" spellcheck="false" required>
+        </div>
+        <div class="field">
+          <label for="add-entity-row-key">Row key</label>
+          <input id="add-entity-row-key" type="text" autocomplete="off" spellcheck="false" required>
+        </div>
+      </div>
+      <div class="field">
+        <label>Properties</label>
+        <div id="add-entity-properties" class="entity-properties"></div>
+        <button id="add-entity-property" type="button" class="outlined-button">
+          <i data-icon="plus"></i>
+          Add property
+        </button>
+      </div>
+      <p id="add-entity-error" class="message error" role="alert" hidden></p>
+      <menu>
+        <button id="add-entity-cancel" type="button">Cancel</button>
+        <button id="add-entity-submit" type="submit" class="primary">Add entity</button>
       </menu>
     </form>
   </dialog>

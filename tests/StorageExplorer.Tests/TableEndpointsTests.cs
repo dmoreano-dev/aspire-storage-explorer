@@ -133,6 +133,134 @@ public class TableEndpointsTests
         Assert.Empty(host.Tables.Calls);
     }
 
+    // ---- create entity ----
+
+    [Fact]
+    public async Task CreateEntity_ReturnsNoContent()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Connection.Table = new TableServiceClient(TestConnectionStrings.Local);
+        var request = host.Request(HttpMethod.Post, "/api/tables/widgets/entities");
+        request.Content = JsonContent.Create(new
+        {
+            partitionKey = "a",
+            rowKey = "1",
+            properties = new[] { new { name = "Name", type = "String", value = "Widget" } },
+        });
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(["createEntity:widgets:a:1:Name"], host.Tables.Calls);
+    }
+
+    [Fact]
+    public async Task CreateEntity_NoProperties_ReturnsNoContent()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Connection.Table = new TableServiceClient(TestConnectionStrings.Local);
+        var request = host.Request(HttpMethod.Post, "/api/tables/widgets/entities");
+        request.Content = JsonContent.Create(new { partitionKey = "a", rowKey = "1" });
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(["createEntity:widgets:a:1:"], host.Tables.Calls);
+    }
+
+    [Fact]
+    public async Task CreateEntity_NoTableEndpoint_ReturnsBadRequestWithoutCallingTheService()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        var request = host.Request(HttpMethod.Post, "/api/tables/widgets/entities");
+        request.Content = JsonContent.Create(new { partitionKey = "a", rowKey = "1" });
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("No table endpoint", (await Json(response)).GetProperty("title").GetString());
+        Assert.Empty(host.Tables.Calls);
+    }
+
+    [Theory]
+    [InlineData(null, "1")]
+    [InlineData("a", null)]
+    [InlineData("", "1")]
+    [InlineData("a", "")]
+    public async Task CreateEntity_MissingKey_ReturnsBadRequestWithoutCallingTheService(string? partitionKey, string? rowKey)
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Connection.Table = new TableServiceClient(TestConnectionStrings.Local);
+        var request = host.Request(HttpMethod.Post, "/api/tables/widgets/entities");
+        request.Content = JsonContent.Create(new { partitionKey, rowKey });
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("Missing keys", (await Json(response)).GetProperty("title").GetString());
+        Assert.Empty(host.Tables.Calls);
+    }
+
+    [Fact]
+    public async Task CreateEntity_PropertyValueDoesNotMatchItsType_ReturnsBadRequestWithoutCallingTheService()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Connection.Table = new TableServiceClient(TestConnectionStrings.Local);
+        var request = host.Request(HttpMethod.Post, "/api/tables/widgets/entities");
+        request.Content = JsonContent.Create(new
+        {
+            partitionKey = "a",
+            rowKey = "1",
+            properties = new[] { new { name = "Price", type = "Number", value = "not a number" } },
+        });
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await Json(response);
+        Assert.Equal("Invalid property", problem.GetProperty("title").GetString());
+        Assert.Contains("Price", problem.GetProperty("detail").GetString());
+        Assert.Empty(host.Tables.Calls);
+    }
+
+    [Fact]
+    public async Task CreateEntity_PropertyNamedLikeAReservedColumn_ReturnsBadRequestWithoutCallingTheService()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Connection.Table = new TableServiceClient(TestConnectionStrings.Local);
+        var request = host.Request(HttpMethod.Post, "/api/tables/widgets/entities");
+        request.Content = JsonContent.Create(new
+        {
+            partitionKey = "a",
+            rowKey = "1",
+            properties = new[] { new { name = "Timestamp", type = "String", value = "x" } },
+        });
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("Invalid property", (await Json(response)).GetProperty("title").GetString());
+        Assert.Empty(host.Tables.Calls);
+    }
+
     // ---- delete table ----
 
     [Fact]

@@ -504,6 +504,8 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
 #messages th.col-dequeue { width: 110px; }
 #messages th.col-expand { width: 40px; }
 #messages td { height: auto; padding: 12px; vertical-align: top; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* #messages td above outranks the generic td:first-child rule (an ID beats a pseudo-class), so it needs its own. */
+#messages td:first-child { padding-left: 24px; }
 #messages td.col-index, #messages td.col-message-id {
   padding-top: 14px;
   color: var(--muted);
@@ -584,6 +586,8 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
   vertical-align: top;
   font: 12.5px var(--mono);
 }
+/* #entities td above outranks the generic td:first-child rule (an ID beats a pseudo-class), so it needs its own. */
+#entities td:first-child { padding-left: 24px; }
 #entities td.entity-key { font-weight: 600; }
 #entities td.none { color: var(--muted); }
 #entities td.num { text-align: right; }
@@ -674,6 +678,7 @@ dialog {
 }
 dialog::backdrop { background: var(--overlay); }
 #connection-dialog { width: min(560px, calc(100vw - 32px)); }
+#add-entity-dialog { width: min(640px, calc(100vw - 32px)); }
 /* minmax(0, 1fr) lets the column shrink, so a long unbroken error text cannot stretch the dialog. */
 dialog form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 dialog h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
@@ -683,7 +688,8 @@ dialog label.inline { display: flex; align-items: center; gap: 6px; color: var(-
 dialog .field { display: grid; gap: 8px; }
 dialog .field label { color: var(--muted); font-size: 13px; }
 dialog code { color: var(--text); font-family: var(--mono); }
-dialog input[type="password"], dialog input[type="text"], dialog textarea {
+dialog input[type="password"], dialog input[type="text"], dialog input[type="number"], dialog input[type="datetime-local"],
+dialog textarea, dialog select {
   padding: 0 12px;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
@@ -691,9 +697,24 @@ dialog input[type="password"], dialog input[type="text"], dialog textarea {
   color: inherit;
   font: 13px var(--mono);
 }
-dialog input[type="password"], dialog input[type="text"] { height: 38px; }
+dialog input[type="password"], dialog input[type="text"], dialog input[type="number"], dialog input[type="datetime-local"],
+dialog select {
+  height: 38px;
+}
 dialog textarea { padding: 10px 12px; resize: vertical; }
-dialog input:focus-visible, dialog textarea:focus-visible { border-color: var(--accent); outline: 0; }
+dialog input:focus-visible, dialog textarea:focus-visible, dialog select:focus-visible { border-color: var(--accent); outline: 0; }
+
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.entity-properties { display: grid; gap: 8px; }
+.entity-property-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 108px minmax(0, 1fr) 32px;
+  gap: 8px;
+  align-items: center;
+}
+.entity-property-row select { padding: 0 8px; }
+#add-entity-property { justify-self: start; }
 
 .dialog-icon {
   display: grid;

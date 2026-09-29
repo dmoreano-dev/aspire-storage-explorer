@@ -29,6 +29,32 @@ internal static class TableEndpoints
             .AddEndpointFilter<RequireExplorerHeaderFilter>()
             .AddEndpointFilter<RequireWritableFilter>();
 
+        // The body is a JSON object, not a raw stream: unlike a blob's bytes or a queue message's text, an entity is
+        // several typed fields, so it needs a shape to bind, not just a byte stream.
+        api.MapPost("/{table}/entities", async (
+                string table,
+                CreateEntityRequest request,
+                IStorageConnection connection,
+                ITableExplorerService explorer,
+                CancellationToken cancellationToken) =>
+                {
+                    if (connection.Table is null) return NoTableEndpoint();
+
+                    if (string.IsNullOrWhiteSpace(request.PartitionKey) || string.IsNullOrWhiteSpace(request.RowKey))
+                        return Results.Problem(
+                            statusCode: StatusCodes.Status400BadRequest,
+                            title: "Missing keys",
+                            detail: "PartitionKey and RowKey are both required.");
+
+                    if (!EntityPropertyParser.TryParse(request.Properties ?? [], out var properties, out var error))
+                        return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid property", detail: error);
+
+                    await explorer.CreateEntityAsync(table, request.PartitionKey, request.RowKey, properties, cancellationToken);
+                    return Results.NoContent();
+                })
+            .AddEndpointFilter<RequireExplorerHeaderFilter>()
+            .AddEndpointFilter<RequireWritableFilter>();
+
         api.MapGet("/{table}/entities", async (
             string table,
             string? filter,

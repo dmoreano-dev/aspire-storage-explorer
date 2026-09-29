@@ -19,3 +19,13 @@ internal sealed record EntityPage(
     IReadOnlyList<string> Columns,
     IReadOnlyList<IReadOnlyDictionary<string, object?>> Entities,
     string? ContinuationToken);
+
+/// <param name="Name">The property's name, unique within the entity, not one of PartitionKey/RowKey/Timestamp/odata.etag.</param>
+/// <param name="Type">One of "String", "Number", "Boolean", "DateTime" or "Guid" (see <see cref="EntityPropertyParser"/>).</param>
+/// <param name="Value">
+/// The value as typed in the UI, still a string: a number or GUID as its literal text, a boolean as "true"/"false", a
+/// date as whatever <c>Date.prototype.toISOString</c> produced client-side.
+/// </param>
+internal sealed record EntityPropertyInput(string Name, string Type, string? Value);
+
+internal sealed record CreateEntityRequest(string? PartitionKey, string? RowKey, IReadOnlyList<EntityPropertyInput>? Properties);

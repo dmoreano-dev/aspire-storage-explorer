@@ -28,6 +28,14 @@ internal interface ITableExplorerService
     /// the Table service's Create Table operation has no equivalent idempotent-on-matching-metadata behavior.
     /// </remarks>
     Task CreateTableAsync(string table, CancellationToken cancellationToken);
+
+    /// <param name="properties">
+    /// Already-typed values (parsed at the HTTP boundary by <see cref="EntityPropertyParser"/>), keyed by property
+    /// name.
+    /// </param>
+    /// <remarks>Throws when an entity with this PartitionKey/RowKey already exists: the Insert Entity operation is not idempotent.</remarks>
+    Task CreateEntityAsync(
+        string table, string partitionKey, string rowKey, IReadOnlyDictionary<string, object?> properties, CancellationToken cancellationToken);
 }
 
 internal sealed class TableExplorerService(IStorageConnection connection) : ITableExplorerService
@@ -79,6 +87,17 @@ internal sealed class TableExplorerService(IStorageConnection connection) : ITab
 
     public Task CreateTableAsync(string table, CancellationToken cancellationToken) =>
         connection.Table!.GetTableClient(table).CreateAsync(cancellationToken);
+
+    public Task CreateEntityAsync(
+        string table, string partitionKey, string rowKey, IReadOnlyDictionary<string, object?> properties, CancellationToken cancellationToken)
+    {
+        var entity = new TableEntity(partitionKey, rowKey);
+
+        foreach (var (name, value) in properties)
+            entity[name] = value;
+
+        return connection.Table!.GetTableClient(table).AddEntityAsync(entity, cancellationToken);
+    }
 
     private static IReadOnlyDictionary<string, object?> ToRow(TableEntity entity)
     {

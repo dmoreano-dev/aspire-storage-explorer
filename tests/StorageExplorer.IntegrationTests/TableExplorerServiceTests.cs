@@ -267,6 +267,63 @@ public sealed class TableExplorerServiceTests(AzuriteFixture azurite) : IAsyncLi
         Assert.Equal("TableAlreadyExists", actual.ErrorCode);
     }
 
+    // ---- create entity ----
+
+    [Fact]
+    public async Task CreateEntityAsync_MixedPropertyTypes_ReturnsThemWithTheirTypesPreserved()
+    {
+        // Arrange
+        var properties = new Dictionary<string, object?>
+        {
+            ["Name"] = "Widget",
+            ["Price"] = 19.99,
+            ["Quantity"] = 5L,
+            ["InStock"] = true,
+            ["Due"] = new DateTimeOffset(2024, 1, 1, 12, 0, 0, TimeSpan.Zero),
+            ["Id"] = Guid.Parse("11111111-2222-3333-4444-555555555555"),
+        };
+
+        // Act
+        await service.CreateEntityAsync(table.Name, "a", "1", properties, default);
+
+        // Assert
+        var actual = await service.QueryEntitiesAsync(table.Name, null, null, default);
+        var entity = Assert.Single(actual.Entities);
+        Assert.Equal("Widget", entity["Name"]);
+        Assert.Equal(19.99, entity["Price"]);
+        Assert.Equal(5L, entity["Quantity"]);
+        Assert.Equal(true, entity["InStock"]);
+        Assert.Equal(Guid.Parse("11111111-2222-3333-4444-555555555555"), entity["Id"]);
+    }
+
+    [Fact]
+    public async Task CreateEntityAsync_NoProperties_CreatesTheEntityWithJustTheKeys()
+    {
+        // Act
+        await service.CreateEntityAsync(table.Name, "a", "1", new Dictionary<string, object?>(), default);
+
+        // Assert
+        var actual = await service.QueryEntitiesAsync(table.Name, null, null, default);
+        var entity = Assert.Single(actual.Entities);
+        Assert.Equal("a", entity["PartitionKey"]);
+        Assert.Equal("1", entity["RowKey"]);
+    }
+
+    [Fact]
+    public async Task CreateEntityAsync_SamePartitionAndRowKeyAlreadyExists_ThrowsEntityAlreadyExists()
+    {
+        // Arrange
+        await table.AddAsync(new TableEntity("a", "1"));
+
+        // Act
+        var actual = await Assert.ThrowsAsync<RequestFailedException>(() =>
+            service.CreateEntityAsync(table.Name, "a", "1", new Dictionary<string, object?>(), default));
+
+        // Assert
+        Assert.Equal(409, actual.Status);
+        Assert.Equal("EntityAlreadyExists", actual.ErrorCode);
+    }
+
     // Filled once and only read: as many entities as one page plus a few, so a query needs two pages to see them all.
     private const int EntityCount = TableExplorerService.PageSize + 7;
 

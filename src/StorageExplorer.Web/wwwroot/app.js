@@ -47,6 +47,17 @@ const els = {
   queueNote: document.getElementById('queue-note'),
   queueListing: document.getElementById('queue-listing'),
   messagesBody: document.querySelector('#messages tbody'),
+  tableActions: document.getElementById('table-actions'),
+  addEntityButton: document.getElementById('add-entity-button'),
+  addEntityDialog: document.getElementById('add-entity-dialog'),
+  addEntityForm: document.getElementById('add-entity-form'),
+  addEntityPartitionKey: document.getElementById('add-entity-partition-key'),
+  addEntityRowKey: document.getElementById('add-entity-row-key'),
+  addEntityProperties: document.getElementById('add-entity-properties'),
+  addEntityAddProperty: document.getElementById('add-entity-property'),
+  addEntityError: document.getElementById('add-entity-error'),
+  addEntityCancel: document.getElementById('add-entity-cancel'),
+  addEntitySubmit: document.getElementById('add-entity-submit'),
   tableToolbar: document.getElementById('table-toolbar'),
   tableFilter: document.getElementById('table-filter'),
   tableFilterClear: document.getElementById('table-filter-clear'),
@@ -395,16 +406,17 @@ const queuePeekedMessagesUrl = (queue) => `${queueMessagesUrl(queue)}/peeked`;
 
 const tablesUrl = `${API}/tables`;
 const tableUrl = (table) => `${tablesUrl}/${encodeURIComponent(table)}`;
+const entitiesUrl = (table) => `${tableUrl(table)}/entities`;
 function tableEntitiesUrl(table, filter, continuationToken) {
   const params = new URLSearchParams();
   if (filter) params.set('filter', filter);
   if (continuationToken) params.set('continuationToken', continuationToken);
 
   const query = params.toString();
-  return `${tableUrl(table)}/entities${query ? `?${query}` : ''}`;
+  return `${entitiesUrl(table)}${query ? `?${query}` : ''}`;
 }
 const entityUrl = (table, partitionKey, rowKey) =>
-  `${tableUrl(table)}/entities?partitionKey=${encodeURIComponent(partitionKey)}&rowKey=${encodeURIComponent(rowKey)}`;
+  `${entitiesUrl(table)}?partitionKey=${encodeURIComponent(partitionKey)}&rowKey=${encodeURIComponent(rowKey)}`;
 
 // --- Rendering -----------------------------------------------------------------
 
@@ -783,6 +795,7 @@ async function render() {
     els.tableListing.hidden = true;
     els.tableToolbar.hidden = true;
     els.loadMoreBar.hidden = true;
+    els.tableActions.hidden = true;
   }
 
   if (service === 'queues') await renderQueuesView(route.name);
@@ -1005,6 +1018,8 @@ async function renderTablesView(table) {
 
   renderSidebarList(activeTable);
   renderTableLocation(activeTable);
+  // Hiding the button is only a courtesy: the server refuses the insert on a read-only connection anyway.
+  els.tableActions.hidden = !(activeTable && connection && !connection.readOnly);
 
   if (!activeTable) {
     els.tableToolbar.hidden = true;
@@ -1587,6 +1602,16 @@ async function sendMessage(queue, text) {
   await refresh();
 }
 
+async function createEntity(table, partitionKey, rowKey, properties) {
+  await api(entitiesUrl(table), {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ partitionKey, rowKey, properties }),
+  });
+  setStatus(`Added entity ${partitionKey}/${rowKey} to ${table}`);
+  await render();
+}
+
 async function deleteTable(name) {
   const confirmed = await confirmAction({
     title: 'Delete this table permanently?',
@@ -1975,6 +2000,128 @@ els.tableFilterClear.addEventListener('click', () => {
   queryEntities(++renderToken, '');
 });
 els.loadMore.addEventListener('click', loadMoreEntities);
+
+// --- Add a table entity ---------------------------------------------------------
+// A table has no fixed schema, so unlike send-message's single field, this dialog builds the row property by
+// property: each one picks a name, a type and a value, and the value input itself changes shape to match the type
+// (a select for a boolean, a date/time picker for a date, ...) instead of being one text box for everything.
+
+const ENTITY_PROPERTY_TYPES = ['String', 'Number', 'Boolean', 'DateTime', 'Guid'];
+
+function entityValueInput(type) {
+  if (type === 'Boolean') {
+    const select = el('select', 'entity-property-value');
+    select.append(el('option', undefined, 'true'), el('option', undefined, 'false'));
+    return select;
+  }
+
+  const input = el('input', 'entity-property-value');
+  input.type = type === 'Number' ? 'number' : type === 'DateTime' ? 'datetime-local' : 'text';
+  if (type === 'Number') input.step = 'any';
+  if (type === 'Guid') input.placeholder = '00000000-0000-0000-0000-000000000000';
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  return input;
+}
+
+function addEntityPropertyRow() {
+  const row = el('div', 'entity-property-row');
+
+  const name = el('input', 'entity-property-name');
+  name.type = 'text';
+  name.placeholder = 'Property name';
+  name.autocomplete = 'off';
+  name.spellcheck = false;
+
+  const type = el('select', 'entity-property-type');
+  for (const value of ENTITY_PROPERTY_TYPES) type.append(el('option', undefined, value));
+
+  let value = entityValueInput(type.value);
+  type.addEventListener('change', () => {
+    const next = entityValueInput(type.value);
+    value.replaceWith(next);
+    value = next;
+  });
+
+  const remove = el('button', 'icon-button danger');
+  remove.type = 'button';
+  remove.setAttribute('aria-label', 'Remove property');
+  remove.append(icon('trash'));
+  remove.addEventListener('click', () => row.remove());
+
+  row.append(name, type, value, remove);
+  els.addEntityProperties.append(row);
+}
+
+// A row left with both an empty name and an empty value is one the user added and never filled in: dropped rather
+// than forcing a name on it. A DateTime value comes from a "local time, no zone" <input>, so it is turned into an
+// instant here (interpreting what was typed as this browser's local time), the same way the rest of the app already
+// treats every date.
+function entityPropertyRows() {
+  const rows = [...els.addEntityProperties.querySelectorAll('.entity-property-row')];
+  const properties = [];
+
+  for (const row of rows) {
+    const name = row.querySelector('.entity-property-name').value.trim();
+    const type = row.querySelector('.entity-property-type').value;
+    let value = row.querySelector('.entity-property-value').value;
+
+    if (!name && !value) continue;
+
+    if (type === 'DateTime' && value) {
+      const date = new Date(value);
+      if (!Number.isNaN(date.getTime())) value = date.toISOString();
+    }
+
+    properties.push({ name, type, value });
+  }
+
+  return properties;
+}
+
+function showAddEntityError(text) {
+  els.addEntityError.hidden = !text;
+  els.addEntityError.textContent = text ?? '';
+}
+
+function setAddEntityBusy(busy) {
+  els.addEntitySubmit.disabled = busy;
+  els.addEntityCancel.disabled = busy;
+  els.addEntitySubmit.textContent = busy ? 'Adding…' : 'Add entity';
+}
+
+els.addEntityButton.addEventListener('click', () => {
+  if (!activeTable) return;
+  els.addEntityPartitionKey.value = '';
+  els.addEntityRowKey.value = '';
+  els.addEntityProperties.replaceChildren();
+  addEntityPropertyRow();
+  showAddEntityError('');
+  setAddEntityBusy(false);
+  els.addEntityDialog.showModal();
+  els.addEntityPartitionKey.focus();
+});
+
+els.addEntityAddProperty.addEventListener('click', addEntityPropertyRow);
+els.addEntityCancel.addEventListener('click', () => els.addEntityDialog.close());
+els.addEntityForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!activeTable) return;
+  const partitionKey = els.addEntityPartitionKey.value.trim();
+  const rowKey = els.addEntityRowKey.value.trim();
+  if (!partitionKey || !rowKey) return;
+
+  setAddEntityBusy(true);
+  showAddEntityError('');
+  try {
+    await createEntity(activeTable, partitionKey, rowKey, entityPropertyRows());
+    els.addEntityDialog.close();
+  } catch (error) {
+    showAddEntityError(error.message);
+  } finally {
+    setAddEntityBusy(false);
+  }
+});
 
 // --- Create container / folder --------------------------------------------------
 // One generic "type a name" dialog, reused for both: it calls onSubmit(name) and closes on success, showing

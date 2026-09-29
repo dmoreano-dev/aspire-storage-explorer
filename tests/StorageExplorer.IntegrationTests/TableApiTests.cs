@@ -92,6 +92,58 @@ public sealed class TableApiTests(AzuriteFixture azurite) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CreateEntity_MixedPropertyTypes_ReturnsNoContentAndTheEntityCanBeQueriedBackWithItsTypesPreserved()
+    {
+        // Arrange
+        using var client = Start();
+        var request = WithHeader(HttpMethod.Post, $"/api/tables/{table.Name}/entities");
+        request.Content = JsonContent.Create(new
+        {
+            partitionKey = "b",
+            rowKey = "2",
+            properties = new object[]
+            {
+                new { name = "Count", type = "Number", value = "42" },
+                new { name = "Ratio", type = "Number", value = "3.5" },
+                new { name = "Active", type = "Boolean", value = "true" },
+                new { name = "Due", type = "DateTime", value = "2024-01-01T12:00:00Z" },
+                new { name = "Id", type = "Guid", value = "11111111-2222-3333-4444-555555555555" },
+            },
+        });
+
+        // Act
+        var response = await client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var entities = await client.GetFromJsonAsync<JsonElement>($"/api/tables/{table.Name}/entities");
+        var entity = entities.GetProperty("entities").EnumerateArray().Single(e => e.GetProperty("RowKey").GetString() == "2");
+        Assert.Equal(42, entity.GetProperty("Count").GetInt64());
+        Assert.Equal(3.5, entity.GetProperty("Ratio").GetDouble());
+        Assert.True(entity.GetProperty("Active").GetBoolean());
+        Assert.Equal("11111111-2222-3333-4444-555555555555", entity.GetProperty("Id").GetString());
+    }
+
+    [Fact]
+    public async Task CreateEntity_WithoutExplorerHeader_CreatesNothing()
+    {
+        // Arrange
+        using var client = Start();
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/tables/{table.Name}/entities")
+        {
+            Content = JsonContent.Create(new { partitionKey = "b", rowKey = "2" }),
+        };
+
+        // Act
+        var response = await client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var entities = await client.GetFromJsonAsync<JsonElement>($"/api/tables/{table.Name}/entities");
+        Assert.Single(entities.GetProperty("entities").EnumerateArray());
+    }
+
+    [Fact]
     public async Task DeleteTable_ExistingTable_ReturnsNoContentAndRemovesIt()
     {
         // Arrange
