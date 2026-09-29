@@ -6,6 +6,8 @@ the date when you tag.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-29
+
 ### Added
 
 - Send a message to a queue, mirroring blob upload: a **Send message** button next to the queue title (visible
@@ -22,6 +24,23 @@ the date when you tag.
   when the account has no queue/table endpoint. Creating a queue that already exists is a no-op (Azure Queue's Create
   Queue succeeds when the existing queue's metadata matches, and this never sets any); creating a table that already
   exists throws `TableAlreadyExists`, since the Table service has no equivalent idempotent behavior.
+- Add entities to a table (insert a record): an **Add entity** button next to the table title (visible whenever a
+  table is selected, hidden on a read-only connection the same way the other write actions are) opens a dialog with
+  fixed Partition key/Row key fields plus a dynamic list of property rows, since a table has no fixed schema. Each
+  row picks a name, a type (String/Number/Boolean/DateTime/Guid) and a value, and the value input itself changes
+  shape to match the type (plain text, a number input, a true/false select, a native date/time picker, or a text
+  field hinting at a GUID). New `POST /api/tables/{table}/entities`, behind the same
+  `RequireExplorerHeaderFilter`/`RequireWritableFilter` guards as the other write actions. `EntityPropertyParser`
+  turns each typed string into the .NET value `TableEntity` needs to pick the right EDM type (Int64 for a whole
+  number, Double otherwise, Bool, DateTimeOffset, Guid), and rejects `PartitionKey`/`RowKey`/`Timestamp`/`odata.etag`
+  as property names since those are already handled elsewhere.
+
+### Fixed
+
+- The first column's padding not matching the header on the Queues and Tables listings: `#messages td` and
+  `#entities td` set padding with an ID selector, which outranks the generic `td:first-child` rule (an ID beats a
+  pseudo-class), so the header's 24px left padding never reached those two tables' first column. Blobs (`#entries`)
+  has no such override, so it was unaffected.
 
 ## [0.9.0] - 2026-09-28
 
