@@ -6,6 +6,16 @@ the date when you tag.
 
 ## [Unreleased]
 
+### Added
+
+- Create queues and tables, mirroring container/folder creation: the same **New container** button next to the
+  sidebar heading now reads **New queue** or **New table** on those services, opening the same name-only dialog. New
+  endpoints `POST /api/queues/{queue}` and `POST /api/tables/{table}`, behind the same
+  `RequireExplorerHeaderFilter`/`RequireWritableFilter` guards as the other write actions, and hidden read-only or
+  when the account has no queue/table endpoint. Creating a queue that already exists is a no-op (Azure Queue's Create
+  Queue succeeds when the existing queue's metadata matches, and this never sets any); creating a table that already
+  exists throws `TableAlreadyExists`, since the Table service has no equivalent idempotent behavior.
+
 ## [0.9.0] - 2026-09-28
 
 ### Added

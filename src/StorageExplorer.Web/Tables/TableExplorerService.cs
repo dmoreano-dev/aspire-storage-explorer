@@ -22,6 +22,12 @@ internal interface ITableExplorerService
     /// </summary>
     /// <remarks>A missing entity does not throw: the SDK treats this delete as already accomplished, not an error.</remarks>
     Task DeleteEntityAsync(string table, string partitionKey, string rowKey, CancellationToken cancellationToken);
+
+    /// <remarks>
+    /// Unlike <c>QueueExplorerService.CreateQueueAsync</c>, this throws when a table with that name already exists:
+    /// the Table service's Create Table operation has no equivalent idempotent-on-matching-metadata behavior.
+    /// </remarks>
+    Task CreateTableAsync(string table, CancellationToken cancellationToken);
 }
 
 internal sealed class TableExplorerService(IStorageConnection connection) : ITableExplorerService
@@ -70,6 +76,9 @@ internal sealed class TableExplorerService(IStorageConnection connection) : ITab
 
     public Task DeleteEntityAsync(string table, string partitionKey, string rowKey, CancellationToken cancellationToken) =>
         connection.Table!.GetTableClient(table).DeleteEntityAsync(partitionKey, rowKey, cancellationToken: cancellationToken);
+
+    public Task CreateTableAsync(string table, CancellationToken cancellationToken) =>
+        connection.Table!.GetTableClient(table).CreateAsync(cancellationToken);
 
     private static IReadOnlyDictionary<string, object?> ToRow(TableEntity entity)
     {

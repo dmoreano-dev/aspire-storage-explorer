@@ -236,4 +236,36 @@ public sealed class QueueExplorerServiceTests(AzuriteFixture azurite) : IAsyncLi
         // Assert
         Assert.Equal(0, actual);
     }
+
+    // ---- create queue ----
+
+    [Fact]
+    public async Task CreateQueueAsync_NewName_CreatesQueue()
+    {
+        // Arrange
+        var name = $"t{Guid.NewGuid():N}";
+        var client = new Azure.Storage.Queues.QueueServiceClient(azurite.ConnectionString).GetQueueClient(name);
+
+        try
+        {
+            // Act
+            await service.CreateQueueAsync(name, default);
+
+            // Assert
+            Assert.True(await client.ExistsAsync());
+        }
+        finally
+        {
+            await client.DeleteIfExistsAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CreateQueueAsync_ExistingQueue_CompletesWithoutThrowing()
+    {
+        // Act
+        // Unlike a blob container, the Queue service's Create Queue is idempotent when the existing queue's metadata
+        // matches what is given (none, here) - not throwing is the assertion.
+        await service.CreateQueueAsync(queue.Name, default);
+    }
 }

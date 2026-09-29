@@ -16,6 +16,19 @@ internal static class QueueEndpoints
                 ? NoQueueEndpoint()
                 : Results.Ok(await explorer.ListQueuesAsync(cancellationToken)));
 
+        api.MapPost("/{queue}", async (
+                string queue,
+                IStorageConnection connection,
+                IQueueExplorerService explorer,
+                CancellationToken cancellationToken) =>
+                {
+                    if (connection.Queue is null) return NoQueueEndpoint();
+                    await explorer.CreateQueueAsync(queue, cancellationToken);
+                    return Results.NoContent();
+                })
+            .AddEndpointFilter<RequireExplorerHeaderFilter>()
+            .AddEndpointFilter<RequireWritableFilter>();
+
         api.MapGet("/{queue}/messages", async (
             string queue,
             IStorageConnection connection,

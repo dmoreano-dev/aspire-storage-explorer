@@ -47,6 +47,40 @@ public class QueueEndpointsTests
         Assert.Empty(host.Queues.Calls);
     }
 
+    // ---- create queue ----
+
+    [Fact]
+    public async Task CreateQueue_ReturnsNoContent()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Connection.Queue = new QueueServiceClient(TestConnectionStrings.Local);
+        var request = host.Request(HttpMethod.Post, "/api/queues/orders");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(["createQueue:orders"], host.Queues.Calls);
+    }
+
+    [Fact]
+    public async Task CreateQueue_NoQueueEndpoint_ReturnsBadRequestWithoutCallingTheService()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        var request = host.Request(HttpMethod.Post, "/api/queues/orders");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("No queue endpoint", (await Json(response)).GetProperty("title").GetString());
+        Assert.Empty(host.Queues.Calls);
+    }
+
     // ---- messages ----
 
     [Fact]

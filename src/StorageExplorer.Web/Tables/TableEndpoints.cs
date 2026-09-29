@@ -16,6 +16,19 @@ internal static class TableEndpoints
                 ? NoTableEndpoint()
                 : Results.Ok(await explorer.ListTablesAsync(cancellationToken)));
 
+        api.MapPost("/{table}", async (
+                string table,
+                IStorageConnection connection,
+                ITableExplorerService explorer,
+                CancellationToken cancellationToken) =>
+                {
+                    if (connection.Table is null) return NoTableEndpoint();
+                    await explorer.CreateTableAsync(table, cancellationToken);
+                    return Results.NoContent();
+                })
+            .AddEndpointFilter<RequireExplorerHeaderFilter>()
+            .AddEndpointFilter<RequireWritableFilter>();
+
         api.MapGet("/{table}/entities", async (
             string table,
             string? filter,

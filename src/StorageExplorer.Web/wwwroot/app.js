@@ -403,9 +403,18 @@ const entityUrl = (table, partitionKey, rowKey) =>
 // things with a client-side substring filter, so one set of functions renders any of them, reusing the same markup.
 
 const SIDEBAR_LABELS = {
-  blobs: { heading: 'Containers', placeholder: 'Search containers', empty: 'No containers match.', icon: 'container' },
-  queues: { heading: 'Queues', placeholder: 'Search queues', empty: 'No queues match.', icon: 'layers' },
-  tables: { heading: 'Tables', placeholder: 'Search tables', empty: 'No tables match.', icon: 'table' },
+  blobs: {
+    heading: 'Containers', placeholder: 'Search containers', empty: 'No containers match.', icon: 'container',
+    createTitle: 'New container', createLabel: 'Container name',
+  },
+  queues: {
+    heading: 'Queues', placeholder: 'Search queues', empty: 'No queues match.', icon: 'layers',
+    createTitle: 'New queue', createLabel: 'Queue name',
+  },
+  tables: {
+    heading: 'Tables', placeholder: 'Search tables', empty: 'No tables match.', icon: 'table',
+    createTitle: 'New table', createLabel: 'Table name',
+  },
 };
 
 // The services besides Blobs (always there), and what says whether the account has them.
@@ -445,8 +454,13 @@ function renderSidebarHeading() {
   els.containerFilter.placeholder = labels.placeholder;
   els.containerFilter.setAttribute('aria-label', labels.placeholder);
   els.filterShortcutHint.title = `Press / to ${labels.placeholder.toLowerCase()}`;
-  // Hiding the button is only a courtesy: the server refuses the create on a read-only connection anyway.
-  els.newContainerButton.hidden = !(service === 'blobs' && connection && !connection.readOnly);
+
+  els.newContainerButton.title = labels.createTitle;
+  els.newContainerButton.setAttribute('aria-label', labels.createTitle);
+  // Hiding the button is only a courtesy: the server refuses the create on a read-only connection, or one without
+  // this service, anyway.
+  const hasService = service === 'blobs' || (connection?.[OPTIONAL_SERVICES[service]] ?? false);
+  els.newContainerButton.hidden = !(hasService && connection && !connection.readOnly);
 }
 
 function renderSidebarList(active) {
@@ -1946,15 +1960,25 @@ els.promptForm.addEventListener('submit', (event) => {
   promptOnSubmit?.();
 });
 
+// One name -> one URL, one noun: what the create button does depends only on which service is on screen.
+const CREATE_TARGETS = {
+  blobs: { url: containerUrl, noun: 'container' },
+  queues: { url: queueUrl, noun: 'queue' },
+  tables: { url: tableUrl, noun: 'table' },
+};
+
 els.newContainerButton.addEventListener('click', () => {
+  const labels = SIDEBAR_LABELS[service];
+  const target = CREATE_TARGETS[service];
+
   openPrompt({
-    title: 'New container',
-    label: 'Container name',
+    title: labels.createTitle,
+    label: labels.createLabel,
     submitLabel: 'Create',
     busyLabel: 'Creating…',
     onSubmit: async (name) => {
-      await api(containerUrl(name), { method: 'POST', headers: REQUEST_HEADERS });
-      setStatus(`Created container ${name}`);
+      await api(target.url(name), { method: 'POST', headers: REQUEST_HEADERS });
+      setStatus(`Created ${target.noun} ${name}`);
       await refresh();
     },
   });

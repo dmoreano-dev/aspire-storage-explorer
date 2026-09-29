@@ -232,6 +232,41 @@ public sealed class TableExplorerServiceTests(AzuriteFixture azurite) : IAsyncLi
         await service.DeleteEntityAsync(table.Name, "no-such-partition", "no-such-row", default);
     }
 
+    // ---- create table ----
+
+    [Fact]
+    public async Task CreateTableAsync_NewName_CreatesTable()
+    {
+        // Arrange
+        var name = $"t{Guid.NewGuid():N}";
+        var client = new TableServiceClient(azurite.ConnectionString).GetTableClient(name);
+
+        try
+        {
+            // Act
+            await service.CreateTableAsync(name, default);
+
+            // Assert
+            Assert.Contains(await service.ListTablesAsync(default), t => t.Name == name);
+        }
+        finally
+        {
+            await client.DeleteAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CreateTableAsync_ExistingTable_ThrowsTableAlreadyExists()
+    {
+        // Act
+        var actual = await Assert.ThrowsAsync<RequestFailedException>(() =>
+            service.CreateTableAsync(table.Name, default));
+
+        // Assert
+        Assert.Equal(409, actual.Status);
+        Assert.Equal("TableAlreadyExists", actual.ErrorCode);
+    }
+
     // Filled once and only read: as many entities as one page plus a few, so a query needs two pages to see them all.
     private const int EntityCount = TableExplorerService.PageSize + 7;
 

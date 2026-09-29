@@ -42,6 +42,40 @@ public class TableEndpointsTests
         Assert.Empty(host.Tables.Calls);
     }
 
+    // ---- create table ----
+
+    [Fact]
+    public async Task CreateTable_ReturnsNoContent()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        host.Connection.Table = new TableServiceClient(TestConnectionStrings.Local);
+        var request = host.Request(HttpMethod.Post, "/api/tables/widgets");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(["createTable:widgets"], host.Tables.Calls);
+    }
+
+    [Fact]
+    public async Task CreateTable_NoTableEndpoint_ReturnsBadRequestWithoutCallingTheService()
+    {
+        // Arrange
+        using var host = new ApiHost();
+        var request = host.Request(HttpMethod.Post, "/api/tables/widgets");
+
+        // Act
+        var response = await host.Client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("No table endpoint", (await Json(response)).GetProperty("title").GetString());
+        Assert.Empty(host.Tables.Calls);
+    }
+
     // ---- entities ----
 
     [Fact]

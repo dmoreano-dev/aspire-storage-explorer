@@ -30,6 +30,13 @@ internal interface IQueueExplorerService
     /// </summary>
     /// <returns>How many messages were actually deleted.</returns>
     Task<int> DeletePeekedMessagesAsync(string queue, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Creates the queue. Unlike <c>BlobExplorerService.CreateContainerAsync</c>, an already-existing queue does not
+    /// make this throw: Azure Queue's Create Queue operation succeeds as a no-op when the existing queue's metadata
+    /// matches what is given here (none, since this never sets any), only throwing when it differs.
+    /// </summary>
+    Task CreateQueueAsync(string queue, CancellationToken cancellationToken);
 }
 
 internal sealed class QueueExplorerService(IStorageConnection connection) : IQueueExplorerService
@@ -107,6 +114,9 @@ internal sealed class QueueExplorerService(IStorageConnection connection) : IQue
 
         return deleted;
     }
+
+    public Task CreateQueueAsync(string queue, CancellationToken cancellationToken) =>
+        connection.Queue!.GetQueueClient(queue).CreateAsync(cancellationToken: cancellationToken);
 
     private static QueueMessage ToQueueMessage(PeekedMessage message)
     {

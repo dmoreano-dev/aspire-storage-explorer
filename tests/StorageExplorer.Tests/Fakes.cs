@@ -229,6 +229,9 @@ internal sealed class FakeQueueExplorerService : IQueueExplorerService
     public Task<int> DeletePeekedMessagesAsync(string queue, CancellationToken cancellationToken) =>
         Record($"deletePeeked:{queue}", DeletedPeekedCount);
 
+    public async Task CreateQueueAsync(string queue, CancellationToken cancellationToken) =>
+        await Record($"createQueue:{queue}", true);
+
     private Task<T> Record<T>(string call, T result)
     {
         Calls.Add(call);
@@ -260,6 +263,9 @@ internal sealed class FakeTableExplorerService : ITableExplorerService
 
     public async Task DeleteEntityAsync(string table, string partitionKey, string rowKey, CancellationToken cancellationToken) =>
         await Record($"deleteEntity:{table}:{partitionKey}:{rowKey}", true);
+
+    public async Task CreateTableAsync(string table, CancellationToken cancellationToken) =>
+        await Record($"createTable:{table}", true);
 
     private Task<T> Record<T>(string call, T result)
     {
